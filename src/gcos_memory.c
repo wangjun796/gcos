@@ -1,26 +1,26 @@
 /**
  * @file gcos_memory.c
- * @brief GCOS VM 内存管理实现
+ * @brief GCOS VM Memory Management Implementation
  * 
- * COS3规范分区内存管理：
- * - 执行器栈 (256 × 4B = 1KB, 易失性)
- * - 间接变量栈 (64 × 16B = 1KB, 易失性)
- * - 全局数据区 (4KB, 易失性)
- * - 堆 (8KB, 非易失性)
- * - 模块程序区 (16KB, 非易失性)
+ * COS3 Specification Partitioned Memory Management:
+ * - Executor Stack (256 x 4B = 1KB, Volatile)
+ * - Indirect Variable Stack (64 x 16B = 1KB, Volatile)
+ * - Global Data Area (4KB, Volatile)
+ * - Heap (8KB, Non-volatile)
+ * - Module Program Area (16KB, Non-volatile)
  * 
- * 零动态内存分配原则：所有内存在编译时静态分配
+ * Zero Dynamic Memory Allocation Principle: All memory statically allocated at compile time
  * 
  * @version 1.0.0
  * @date 2026-05-11
  */
 
 #include "gcos_vm.h"
+#include "gcos_platform.h"
 #include <string.h>
-#include <stdio.h>
 
 /* ============================================================================
- * API 实现 - 执行器栈操作
+ * API Implementation - Executor Stack Operations
  * ============================================================================ */
 
 GCOSResult gcos_memory_stack_push(GCOSVM *vm, u32 value) {
@@ -28,15 +28,15 @@ GCOSResult gcos_memory_stack_push(GCOSVM *vm, u32 value) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 检查栈溢出 */
+    /* Check stack overflow */
     if (vm->runtime.stack_pointer >= GCOS_EXECUTOR_STACK_SIZE) {
         vm->runtime.exception = EXCEPTION_STACK_OVERFLOW;
         vm->state = GCOS_STATE_EXCEPTION;
-        printf("[GCOS Memory] Stack overflow at SP=%u\n", vm->runtime.stack_pointer);
+        GCOS_PRINTF("[GCOS Memory] Stack overflow at SP=%u\n", vm->runtime.stack_pointer);
         return GCOS_ERROR_STACK_OVERFLOW;
     }
     
-    /* 压栈 */
+    /* Push to stack */
     vm->runtime.executor_stack[vm->runtime.stack_pointer] = value;
     vm->runtime.stack_pointer++;
     
@@ -48,15 +48,15 @@ GCOSResult gcos_memory_stack_pop(GCOSVM *vm, u32 *value) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 检查栈下溢 */
+    /* Check stack underflow */
     if (vm->runtime.stack_pointer == 0) {
         vm->runtime.exception = EXCEPTION_STACK_UNDERFLOW;
         vm->state = GCOS_STATE_EXCEPTION;
-        printf("[GCOS Memory] Stack underflow\n");
+        GCOS_PRINTF("[GCOS Memory] Stack underflow\n");
         return GCOS_ERROR_STACK_UNDERFLOW;
     }
     
-    /* 弹栈 */
+    /* Pop from stack */
     vm->runtime.stack_pointer--;
     *value = vm->runtime.executor_stack[vm->runtime.stack_pointer];
     
@@ -96,7 +96,7 @@ GCOSResult gcos_memory_clear_stack(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 间接变量栈操作
+ * API Implementation - Indirect Variable Stack Operations
  * ============================================================================ */
 
 GCOSResult gcos_memory_indirect_push(GCOSVM *vm, const u8 data[16]) {
@@ -104,13 +104,13 @@ GCOSResult gcos_memory_indirect_push(GCOSVM *vm, const u8 data[16]) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 检查栈溢出 */
+    /* Check stack overflow */
     if (vm->runtime.indirect_stack_pointer >= GCOS_INDIRECT_STACK_SIZE) {
-        printf("[GCOS Memory] Indirect stack overflow\n");
+        GCOS_PRINTF("[GCOS Memory] Indirect stack overflow\n");
         return GCOS_ERROR_STACK_OVERFLOW;
     }
     
-    /* 压栈（复制16字节）*/
+    /* Push to stack (copy 16 bytes) */
     memcpy(vm->runtime.indirect_stack[vm->runtime.indirect_stack_pointer],
            data, 16);
     vm->runtime.indirect_stack_pointer++;
@@ -123,13 +123,13 @@ GCOSResult gcos_memory_indirect_pop(GCOSVM *vm, u8 data[16]) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 检查栈下溢 */
+    /* Check stack underflow */
     if (vm->runtime.indirect_stack_pointer == 0) {
-        printf("[GCOS Memory] Indirect stack underflow\n");
+        GCOS_PRINTF("[GCOS Memory] Indirect stack underflow\n");
         return GCOS_ERROR_STACK_UNDERFLOW;
     }
     
-    /* 弹栈 */
+    /* Pop from stack */
     vm->runtime.indirect_stack_pointer--;
     memcpy(data, vm->runtime.indirect_stack[vm->runtime.indirect_stack_pointer], 16);
     
@@ -163,7 +163,7 @@ GCOSResult gcos_memory_indirect_write(GCOSVM *vm, u32 index, const u8 data[16]) 
 }
 
 /* ============================================================================
- * API 实现 - 全局数据区操作
+ * API Implementation - Global Data Area Operations
  * ============================================================================ */
 
 GCOSResult gcos_memory_global_read(const GCOSVM *vm, u32 offset, u8 *data, u32 size) {
@@ -171,9 +171,9 @@ GCOSResult gcos_memory_global_read(const GCOSVM *vm, u32 offset, u8 *data, u32 s
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 边界检查 */
+    /* Boundary check */
     if (offset + size > GCOS_GLOBAL_DATA_SIZE) {
-        printf("[GCOS Memory] Global data read out of bounds: offset=%u, size=%u\n",
+        GCOS_PRINTF("[GCOS Memory] Global data read out of bounds: offset=%u, size=%u\n",
                offset, size);
         return GCOS_ERROR_MEMORY_ACCESS;
     }
@@ -187,9 +187,9 @@ GCOSResult gcos_memory_global_write(GCOSVM *vm, u32 offset, const u8 *data, u32 
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 边界检查 */
+    /* Boundary check */
     if (offset + size > GCOS_GLOBAL_DATA_SIZE) {
-        printf("[GCOS Memory] Global data write out of bounds: offset=%u, size=%u\n",
+        GCOS_PRINTF("[GCOS Memory] Global data write out of bounds: offset=%u, size=%u\n",
                offset, size);
         vm->runtime.exception = EXCEPTION_ACCESS_VIOLATION;
         return GCOS_ERROR_MEMORY_ACCESS;
@@ -197,7 +197,7 @@ GCOSResult gcos_memory_global_write(GCOSVM *vm, u32 offset, const u8 *data, u32 
     
     memcpy(&vm->runtime.global_data[offset], data, size);
     
-    /* 更新使用量 */
+    /* Update usage count */
     if (offset + size > vm->runtime.global_data_used) {
         vm->runtime.global_data_used = offset + size;
     }
@@ -224,29 +224,29 @@ GCOSResult gcos_memory_clear_global_data(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 堆管理（简化版）
+ * API Implementation - Heap Management (Simplified)
  * ============================================================================ */
 
 /**
- * @brief 从堆分配内存
- * @param vm VM实例
- * @param size 分配大小（字节）
- * @return 偏移地址，0表示失败
+ * @brief Allocate memory from heap
+ * @param vm VM instance
+ * @param size Allocation size in bytes
+ * @return Offset address, 0 indicates failure
  * 
- * @note COS3规范：堆是非易失性的，需要集成eflash库
- * @note 当前实现是简化的线性分配器，后续需要实现完整的堆管理器
+ * @note COS3 specification: Heap is non-volatile, requires eflash library integration
+ * @note Current implementation is a simplified linear allocator, full heap manager needed later
  */
 u32 gcos_memory_heap_alloc(GCOSVM *vm, u32 size) {
     if (vm == NULL || size == 0) {
         return 0;
     }
     
-    /* 对齐到4字节边界 */
+    /* Align to 4-byte boundary */
     u32 aligned_size = (size + 3) & ~3;
     
-    /* 检查是否有足够空间 */
+    /* Check if there is enough space */
     if (vm->runtime.heap_used + aligned_size > GCOS_HEAP_SIZE) {
-        printf("[GCOS Memory] Heap allocation failed: requested=%u, available=%u\n",
+        GCOS_PRINTF("[GCOS Memory] Heap allocation failed: requested=%u, available=%u\n",
                aligned_size, GCOS_HEAP_SIZE - vm->runtime.heap_used);
         return 0;
     }
@@ -258,7 +258,7 @@ u32 gcos_memory_heap_alloc(GCOSVM *vm, u32 size) {
     /* 清零分配的内存 */
     memset(&vm->runtime.heap[addr], 0, aligned_size);
     
-    printf("[GCOS Memory] Heap allocated: addr=%u, size=%u (aligned=%u)\n",
+    GCOS_PRINTF("[GCOS Memory] Heap allocated: addr=%u, size=%u (aligned=%u)\n",
            addr, size, aligned_size);
     
     return addr;
@@ -281,7 +281,7 @@ GCOSResult gcos_memory_heap_free(GCOSVM *vm, u32 addr) {
     /* 简化实现：仅支持释放最后分配的块 */
     /* TODO: 实现完整的堆管理器 */
     
-    printf("[GCOS Memory] Warning: heap_free is simplified (LIFO only)\n");
+    GCOS_PRINTF("[GCOS Memory] Warning: heap_free is simplified (LIFO only)\n");
     
     return GCOS_SUCCESS;
 }
@@ -299,9 +299,9 @@ GCOSResult gcos_memory_heap_read(const GCOSVM *vm, u32 addr, u8 *data, u32 size)
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 边界检查 */
+    /* Boundary check */
     if (addr + size > GCOS_HEAP_SIZE) {
-        printf("[GCOS Memory] Heap read out of bounds: addr=%u, size=%u\n",
+        GCOS_PRINTF("[GCOS Memory] Heap read out of bounds: addr=%u, size=%u\n",
                addr, size);
         return GCOS_ERROR_MEMORY_ACCESS;
     }
@@ -323,7 +323,7 @@ GCOSResult gcos_memory_heap_write(GCOSVM *vm, u32 addr, const u8 *data, u32 size
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 边界检查 */
+    /* Boundary check */
     if (addr + size > GCOS_HEAP_SIZE) {
         printf("[GCOS Memory] Heap write out of bounds: addr=%u, size=%u\n",
                addr, size);
@@ -368,7 +368,7 @@ GCOSResult gcos_memory_code_read(const GCOSVM *vm, u32 offset, u8 *code, u32 siz
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 边界检查 */
+    /* Boundary check */
     if (offset + size > GCOS_MODULE_CODE_SIZE) {
         printf("[GCOS Memory] Code read out of bounds: offset=%u, size=%u\n",
                offset, size);
@@ -387,7 +387,7 @@ GCOSResult gcos_memory_code_write(GCOSVM *vm, u32 offset, const u8 *code, u32 si
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 边界检查 */
+    /* Boundary check */
     if (offset + size > GCOS_MODULE_CODE_SIZE) {
         printf("[GCOS Memory] Code write out of bounds: offset=%u, size=%u\n",
                offset, size);

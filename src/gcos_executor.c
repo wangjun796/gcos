@@ -1,42 +1,42 @@
 /**
  * @file gcos_executor.c
- * @brief GCOS VM 执行引擎实现
+ * @brief GCOS VM Execution Engine Implementation
  * 
- * 基于COS3规范的栈式虚拟机执行引擎：
- * - 取指-解码-执行循环
- * - 弹栈-执行-压栈模型
- * - 异常处理
- * - 性能统计
+ * Stack-based VM execution engine based on COS3 specification:
+ * - Fetch-Decode-Execute cycle
+ * - Pop-Execute-Push model
+ * - Exception handling
+ * - Performance statistics
  * 
  * @version 1.0.0
  * @date 2026-05-11
  */
 
 #include "gcos_vm.h"
+#include "gcos_platform.h"
 #include <string.h>
-#include <stdio.h>
 
 /* ============================================================================
- * 内部状态（静态分配）
+ * Internal State (Statically Allocated)
  * ============================================================================ */
 
 /**
- * @brief 执行器内部状态
+ * @brief Executor internal state
  */
 typedef struct {
-    bool running;           /**< 是否正在运行 */
-    bool paused;            /**< 是否暂停 */
-    u32 breakpoints[16];    /**< 断点数组 */
-    u8 breakpoint_count;    /**< 断点数量 */
+    bool running;           /**< Is running */
+    bool paused;            /**< Is paused */
+    u32 breakpoints[16];    /**< Breakpoint array */
+    u8 breakpoint_count;    /**< Breakpoint count */
     
-    /* 性能统计 */
-    u64 instruction_count;  /**< 指令计数 */
-    u64 start_time_us;      /**< 开始时间（微秒）*/
-    u32 stack_peak;         /**< 栈使用峰值 */
+    /* Performance statistics */
+    u64 instruction_count;  /**< Instruction count */
+    u64 start_time_us;      /**< Start time (microseconds) */
+    u32 stack_peak;         /**< Stack usage peak */
 } ExecutorState;
 
 /**
- * @brief 全局执行器状态（单例）
+ * @brief Global executor state (singleton)
  */
 static ExecutorState g_executor_state = {
     .running = false,
@@ -47,16 +47,16 @@ static ExecutorState g_executor_state = {
 };
 
 /* ============================================================================
- * 内部辅助函数
+ * Internal Helper Functions
  * ============================================================================ */
 
 /**
- * @brief 获取当前时间（微秒）
- * @return 当前时间戳
- * @note 简化实现，实际应使用平台高精度计时器
+ * @brief Get current time in microseconds
+ * @return Current timestamp
+ * @note Simplified implementation, should use platform-specific high-precision timer in production
  */
 static u64 get_current_time_us(void) {
-    /* TODO: 实现平台相关的高精度计时 */
+    /* TODO: Implement platform-specific high-precision timing */
     return 0;
 }
 
@@ -73,7 +73,7 @@ static bool check_breakpoint(GCOSVM *vm, u32 pc) {
     
     for (u8 i = 0; i < g_executor_state.breakpoint_count; i++) {
         if (g_executor_state.breakpoints[i] == pc) {
-            printf("[GCOS Executor] Breakpoint hit at PC=%u\n", pc);
+            GCOS_PRINTF("[GCOS Executor] Breakpoint hit at PC=%u\n", pc);
             g_executor_state.paused = true;
             return true;
         }
@@ -162,7 +162,7 @@ GCOSResult gcos_executor_start(GCOSVM *vm) {
     }
     
     if (vm->state != GCOS_STATE_IDLE && vm->state != GCOS_STATE_SUSPENDED) {
-        printf("[GCOS Executor] Error: Invalid VM state for start\n");
+        GCOS_PRINTF("[GCOS Executor] Error: Invalid VM state for start\n");
         return GCOS_ERROR_INVALID_STATE;
     }
     
@@ -174,7 +174,7 @@ GCOSResult gcos_executor_start(GCOSVM *vm) {
     
     vm->state = GCOS_STATE_RUNNING;
     
-    printf("[GCOS Executor] Execution started\n");
+    GCOS_PRINTF("[GCOS Executor] Execution started\n");
     return GCOS_SUCCESS;
 }
 
@@ -186,7 +186,7 @@ GCOSResult gcos_executor_stop(GCOSVM *vm) {
     g_executor_state.running = false;
     vm->state = GCOS_STATE_IDLE;
     
-    printf("[GCOS Executor] Execution stopped\n");
+    GCOS_PRINTF("[GCOS Executor] Execution stopped\n");
     return GCOS_SUCCESS;
 }
 
@@ -202,7 +202,7 @@ GCOSResult gcos_executor_pause(GCOSVM *vm) {
     g_executor_state.paused = true;
     vm->state = GCOS_STATE_SUSPENDED;
     
-    printf("[GCOS Executor] Execution paused\n");
+    GCOS_PRINTF("[GCOS Executor] Execution paused\n");
     return GCOS_SUCCESS;
 }
 
@@ -218,7 +218,7 @@ GCOSResult gcos_executor_resume(GCOSVM *vm) {
     g_executor_state.paused = false;
     vm->state = GCOS_STATE_RUNNING;
     
-    printf("[GCOS Executor] Execution resumed\n");
+    GCOS_PRINTF("[GCOS Executor] Execution resumed\n");
     return GCOS_SUCCESS;
 }
 
@@ -237,7 +237,7 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
     while (g_executor_state.running && !g_executor_state.paused) {
         /* 检查异常 */
         if (vm->runtime.exception != EXCEPTION_NONE) {
-            printf("[GCOS Executor] Exception detected: %s\n",
+            GCOS_PRINTF("[GCOS Executor] Exception detected: %s\n",
                    gcos_vm_exception_to_string(vm->runtime.exception));
             vm->state = GCOS_STATE_EXCEPTION;
             break;
@@ -246,7 +246,7 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
         /* 取指 */
         u8 opcode = fetch_instruction(vm);
         if (opcode == 0xFF) {
-            printf("[GCOS Executor] Failed to fetch instruction\n");
+            GCOS_PRINTF("[GCOS Executor] Failed to fetch instruction\n");
             vm->runtime.exception = EXCEPTION_INVALID_OPCODE;
             vm->state = GCOS_STATE_EXCEPTION;
             break;
@@ -262,7 +262,7 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
         u8 operand_count = 0;
         result = decode_instruction(vm, opcode, operands, &operand_count);
         if (result != GCOS_SUCCESS) {
-            printf("[GCOS Executor] Failed to decode instruction\n");
+            GCOS_PRINTF("[GCOS Executor] Failed to decode instruction\n");
             vm->runtime.exception = EXCEPTION_INVALID_OPCODE;
             vm->state = GCOS_STATE_EXCEPTION;
             break;
@@ -271,7 +271,7 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
         /* 执行 */
         result = execute_instruction(vm, opcode, operands, operand_count);
         if (result != GCOS_SUCCESS) {
-            printf("[GCOS Executor] Failed to execute instruction\n");
+            GCOS_PRINTF("[GCOS Executor] Failed to execute instruction\n");
             break;
         }
         
@@ -289,7 +289,7 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
     u64 end_time_us = get_current_time_us();
     vm->total_execution_time_us = end_time_us - g_executor_state.start_time_us;
     
-    printf("[GCOS Executor] Execution completed: %llu instructions\n",
+    GCOS_PRINTF("[GCOS Executor] Execution completed: %llu instructions\n",
            (unsigned long long)g_executor_state.instruction_count);
     
     return GCOS_SUCCESS;
@@ -316,14 +316,14 @@ GCOSResult gcos_executor_add_breakpoint(GCOSVM *vm, u32 address) {
     }
     
     if (g_executor_state.breakpoint_count >= 16) {
-        printf("[GCOS Executor] Error: Too many breakpoints\n");
+        GCOS_PRINTF("[GCOS Executor] Error: Too many breakpoints\n");
         return GCOS_ERROR_BREAKPOINT_LIMIT;
     }
     
     g_executor_state.breakpoints[g_executor_state.breakpoint_count] = address;
     g_executor_state.breakpoint_count++;
     
-    printf("[GCOS Executor] Breakpoint added at address %u\n", address);
+    GCOS_PRINTF("[GCOS Executor] Breakpoint added at address %u\n", address);
     return GCOS_SUCCESS;
 }
 
@@ -340,12 +340,12 @@ GCOSResult gcos_executor_remove_breakpoint(GCOSVM *vm, u32 address) {
             }
             g_executor_state.breakpoint_count--;
             
-            printf("[GCOS Executor] Breakpoint removed at address %u\n", address);
+            GCOS_PRINTF("[GCOS Executor] Breakpoint removed at address %u\n", address);
             return GCOS_SUCCESS;
         }
     }
     
-    printf("[GCOS Executor] Warning: Breakpoint not found at address %u\n", address);
+    GCOS_PRINTF("[GCOS Executor] Warning: Breakpoint not found at address %u\n", address);
     return GCOS_ERROR_NOT_FOUND;
 }
 

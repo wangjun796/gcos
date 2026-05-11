@@ -1,51 +1,51 @@
 #include "gcos_vm.h"
-#include <stdio.h>
+#include "gcos_platform.h"
 
 int main(void) {
-    printf("GCOS VM Basic Test\n");
-    printf("==================\n\n");
+    GCOS_PRINTF("GCOS VM Basic Test\n");
+    GCOS_PRINTF("==================\n\n");
     
     // 创建VM
     GCOSVM *vm = gcos_vm_create();
     if (vm == NULL) {
-        printf("FAILED: Cannot create VM\n");
+        GCOS_PRINTF("FAILED: Cannot create VM\n");
         return 1;
     }
-    printf("✓ VM created\n");
+    GCOS_PRINTF("[PASS] VM created\n");
     
     // 检查版本
-    printf("Version: %d.%d.%d\n", vm->version.major, vm->version.minor, vm->version.patch);
-    printf("✓ Version OK\n");
+    GCOS_PRINTF("Version: %d.%d.%d\n", vm->version.major, vm->version.minor, vm->version.patch);
+    GCOS_PRINTF("[PASS] Version OK\n");
     
     // 检查状态
-    printf("State: %s\n", gcos_vm_state_to_string(vm->state));
-    printf("✓ State OK\n");
+    GCOS_PRINTF("State: %s\n", gcos_vm_state_to_string(vm->state));
+    GCOS_PRINTF("[PASS] State OK\n");
     
     // 测试栈操作
     GCOSResult ret = gcos_vm_stack_push(vm, 42);
     if (ret != GCOS_OK) {
-        printf("FAILED: Stack push error %d\n", ret);
+        GCOS_PRINTF("FAILED: Stack push error %d\n", ret);
         return 1;
     }
-    printf("✓ Stack push OK\n");
+    GCOS_PRINTF("[PASS] Stack push OK\n");
     
     u32 value = 0;
     ret = gcos_vm_stack_pop(vm, &value);
     if (ret != GCOS_OK) {
-        printf("FAILED: Stack pop error %d\n", ret);
+        GCOS_PRINTF("FAILED: Stack pop error %d\n", ret);
         return 1;
     }
-    printf("✓ Stack pop OK (value=%u)\n", value);
+    GCOS_PRINTF("[PASS] Stack pop OK (value=%u)\n", value);
     
     // 测试堆分配
     u32 addr = gcos_vm_heap_alloc(vm, 100);
-    printf("✓ Heap alloc OK (addr=%u)\n", addr);
+    GCOS_PRINTF("[PASS] Heap alloc OK (addr=%u)\n", addr);
     
-    printf("\nAll tests passed!\n");
+    GCOS_PRINTF("\nAll tests passed!\n");
     
-    // 清理
+    // Cleanup
     gcos_vm_destroy(vm);
-    printf("✓ VM destroyed\n");
+    GCOS_PRINTF("[PASS] VM destroyed\n");
     
     return 0;
 }

@@ -1,43 +1,43 @@
 /**
  * @file gcos_vm.c
- * @brief GCOS VM 核心实现 - 基于COS3规范
+ * @brief GCOS VM Core Implementation - Based on COS3 Specification
  * 
- * 特性:
- * - 零动态内存分配（所有内存静态分配）
- * - 分区内存管理（5个独立区域）
- * - 符合COS3规范的API设计
- * - 支持面向过程应用后下载
+ * Features:
+ * - Zero dynamic memory allocation (all memory statically allocated)
+ * - Partitioned memory management (5 independent regions)
+ * - COS3-compliant API design
+ * - Support for procedural application post-download
  * 
  * @version 1.0.0
  * @date 2026-05-11
  */
 
 #include "gcos_vm.h"
+#include "gcos_platform.h"
 #include <string.h>
-#include <stdio.h>
 
 /* ============================================================================
- * 全局静态实例 - 零动态内存分配
+ * Global Static Instance - Zero Dynamic Memory Allocation
  * ============================================================================ */
 
 /**
- * @brief 全局VM实例（单例模式）
- * @note COS3规范要求零动态内存分配，适合嵌入式环境
+ * @brief Global VM instance (singleton pattern)
+ * @note COS3 specification requires zero dynamic memory allocation, suitable for embedded environments
  */
 static GCOSVM g_gcos_vm_instance;
 
 /**
- * @brief VM是否已初始化标志
+ * @brief VM initialization flag
  */
 static bool g_vm_initialized = false;
 
 /* ============================================================================
- * 内部辅助函数
+ * Internal Helper Functions
  * ============================================================================ */
 
 /**
- * @brief 初始化运行时上下文
- * @param ctx 运行时上下文指针
+ * @brief Initialize runtime context
+ * @param ctx Runtime context pointer
  */
 static void runtime_context_init(GCOSRuntimeContext *ctx) {
     if (ctx == NULL) {
@@ -46,29 +46,29 @@ static void runtime_context_init(GCOSRuntimeContext *ctx) {
     
     memset(ctx, 0, sizeof(GCOSRuntimeContext));
     
-    /* 执行器栈初始化 */
+    /* Executor stack initialization */
     ctx->stack_pointer = 0;
     ctx->base_pointer = 0;
     
-    /* 间接变量栈初始化 */
+    /* Indirect variable stack initialization */
     ctx->indirect_stack_pointer = 0;
     
-    /* 全局数据区初始化 */
+    /* Global data area initialization */
     ctx->global_data_used = 0;
     
-    /* 堆初始化 */
+    /* Heap initialization */
     ctx->heap_used = 0;
     
-    /* 程序计数器初始化 */
+    /* Program counter initialization */
     ctx->program_counter = 0;
     
-    /* 帧栈初始化 */
+    /* Frame stack initialization */
     ctx->frame_top = 0;
 }
 
 /**
- * @brief 初始化事务上下文
- * @param trans 事务上下文指针
+ * @brief Initialize transaction context
+ * @param trans Transaction context pointer
  */
 static void transaction_context_init(GCOTransactionContext *trans) {
     if (trans == NULL) {
@@ -82,8 +82,8 @@ static void transaction_context_init(GCOTransactionContext *trans) {
 }
 
 /**
- * @brief 初始化安全管理上下文
- * @param security 安全管理上下文指针
+ * @brief Initialize security management context
+ * @param security Security management context pointer
  */
 static void security_context_init(GCOSSecurityContext *security) {
     if (security == NULL) {
@@ -96,39 +96,39 @@ static void security_context_init(GCOSSecurityContext *security) {
 }
 
 /**
- * @brief 初始化虚拟机实例
- * @param vm VM实例指针
- * @return GCOSResult 成功，其他值失败
+ * @brief Initialize VM instance
+ * @param vm VM instance pointer
+ * @return GCOSResult Success or error code
  */
 static GCOSResult vm_instance_init(GCOSVM *vm) {
     if (vm == NULL) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* 清零整个结构 */
+    /* Clear entire structure */
     memset(vm, 0, sizeof(GCOSVM));
     
-    /* 初始化版本信息 */
+    /* Initialize version information */
     vm->version.major = GCOS_VM_VERSION_MAJOR;
     vm->version.minor = GCOS_VM_VERSION_MINOR;
     vm->version.patch = GCOS_VM_VERSION_PATCH;
     
-    /* 初始化运行时上下文 */
+    /* Initialize runtime context */
     runtime_context_init(&vm->runtime);
     
-    /* 初始化事务上下文 */
+    /* Initialize transaction context */
     transaction_context_init(&vm->transaction);
     
-    /* 初始化安全管理上下文 */
+    /* Initialize security management context */
     security_context_init(&vm->security);
     
-    /* 初始化模块和应用计数 */
+    /* Initialize module and application counts */
     vm->module_count = 0;
     vm->app_count = 0;
     vm->current_module_index = GCOS_INVALID_INDEX;
     vm->current_app_index = GCOS_INVALID_INDEX;
     
-    /* 初始化通道管理 */
+    /* Initialize channel management */
     vm->current_channel = 0;
     vm->active_channels = 0;
     for (int i = 0; i < GCOS_MAX_CHANNELS; i++) {
@@ -136,11 +136,11 @@ static GCOSResult vm_instance_init(GCOSVM *vm) {
         vm->channels[i].active = false;
     }
     
-    /* 初始化状态 */
+    /* Initialize state */
     vm->state = GCOS_STATE_IDLE;
     vm->runtime.exception = EXCEPTION_NONE;
     
-    /* 初始化统计信息 */
+    /* Initialize statistics */
     vm->stats.instructions_executed = 0;
     vm->total_execution_time_us = 0;
     
@@ -148,25 +148,25 @@ static GCOSResult vm_instance_init(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 生命周期管理
+ * API Implementation - Lifecycle Management
  * ============================================================================ */
 
 GCOSVM* gcos_vm_create(void) {
-    /* 如果已经初始化，返回现有实例 */
+    /* If already initialized, return existing instance */
     if (g_vm_initialized) {
-        printf("[GCOS VM] Warning: VM already created, returning existing instance\n");
+        GCOS_PRINTF("[GCOS VM] Warning: VM already created, returning existing instance\n");
         return &g_gcos_vm_instance;
     }
     
-    /* 初始化全局实例 */
+    /* Initialize global instance */
     GCOSResult result = vm_instance_init(&g_gcos_vm_instance);
     if (result != GCOS_OK) {
-        printf("[GCOS VM] Error: Failed to initialize VM (error=%d)\n", result);
+        GCOS_PRINTF("[GCOS VM] Error: Failed to initialize VM (error=%d)\n", result);
         return NULL;
     }
     
     g_vm_initialized = true;
-    printf("[GCOS VM] VM created successfully (static allocation)\n");
+    GCOS_PRINTF("[GCOS VM] VM created successfully (static allocation)\n");
     
     return &g_gcos_vm_instance;
 }
@@ -176,30 +176,30 @@ GCOSResult gcos_vm_destroy(GCOSVM *vm) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* 检查是否是全局实例 */
+    /* Check if this is the global instance */
     if (vm != &g_gcos_vm_instance) {
-        printf("[GCOS VM] Error: Invalid VM instance pointer\n");
+        GCOS_PRINTF("[GCOS VM] Error: Invalid VM instance pointer\n");
         return GCOS_ERROR_INVALID_PARAM;
     }
     
-    /* 停止任何正在执行的操作 */
+    /* Stop any ongoing operations */
     if (vm->state == GCOS_STATE_RUNNING) {
         vm->state = GCOS_STATE_IDLE;
     }
     
-    /* 清理事务备份数据（如果有）*/
+    /* Clean up transaction backup data (if any) */
     if (vm->transaction.backup_data != NULL) {
-        /* 注意：在零动态内存分配模式下，这里不应该有动态分配的内存 */
-        printf("[GCOS VM] Warning: Transaction backup data exists (should not happen in static mode)\n");
+        /* Note: In zero dynamic memory allocation mode, there should be no dynamically allocated memory here */
+        GCOS_PRINTF("[GCOS VM] Warning: Transaction backup data exists (should not happen in static mode)\n");
         vm->transaction.backup_data = NULL;
         vm->transaction.backup_size = 0;
     }
     
-    /* 重置实例但不释放内存（因为是静态分配）*/
+    /* Reset instance but do not release memory (statically allocated) */
     vm_instance_init(vm);
     g_vm_initialized = false;
     
-    printf("[GCOS VM] VM destroyed (memory retained for reuse)\n");
+    GCOS_PRINTF("[GCOS VM] VM destroyed (memory retained for reuse)\n");
     return GCOS_OK;
 }
 
@@ -208,7 +208,7 @@ GCOSResult gcos_vm_init(GCOSVM *vm) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* 如果未创建，先创建 */
+    /* If not created, create first */
     if (!g_vm_initialized) {
         if (gcos_vm_create() == NULL) {
             return GCOS_ERR_OUT_OF_MEMORY;
@@ -216,7 +216,7 @@ GCOSResult gcos_vm_init(GCOSVM *vm) {
         return GCOS_OK;
     }
     
-    /* 如果已经初始化，先重置 */
+    /* If already initialized, reset first */
     return gcos_vm_reset(vm);
 }
 
@@ -225,28 +225,28 @@ GCOSResult gcos_vm_reset(GCOSVM *vm) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* 保存版本信息 */
+    /* Save version information */
     u8 saved_major = vm->version.major;
     u8 saved_minor = vm->version.minor;
     u8 saved_patch = vm->version.patch;
     
-    /* 重新初始化 */
+    /* Re-initialize */
     GCOSResult result = vm_instance_init(vm);
     if (result != GCOS_OK) {
         return result;
     }
     
-    /* 恢复版本信息 */
+    /* Restore version information */
     vm->version.major = saved_major;
     vm->version.minor = saved_minor;
     vm->version.patch = saved_patch;
     
-    printf("[GCOS VM] VM reset completed\n");
+    GCOS_PRINTF("[GCOS VM] VM reset completed\n");
     return GCOS_OK;
 }
 
 /* ============================================================================
- * API 实现 - 状态查询
+ * API Implementation - State Query
  * ============================================================================ */
 
 GCOSState gcos_vm_get_state(const GCOSVM *vm) {
@@ -288,7 +288,7 @@ const char* gcos_vm_exception_to_string(GCOSExceptionType exception) {
 }
 
 /* ============================================================================
- * API 实现 - 统计信息
+ * API Implementation - Statistics
  * ============================================================================ */
 
 void gcos_vm_get_stats(const GCOSVM *vm, u64 *instr_count, u64 *exec_time_us) {
@@ -307,48 +307,48 @@ void gcos_vm_get_stats(const GCOSVM *vm, u64 *instr_count, u64 *exec_time_us) {
 
 void gcos_vm_print_info(const GCOSVM *vm) {
     if (vm == NULL) {
-        printf("[GCOS VM] Error: NULL VM pointer\n");
+        GCOS_PRINTF("[GCOS VM] Error: NULL VM pointer\n");
         return;
     }
-    
-    printf("\n========== GCOS VM Information ==========\n");
-    printf("Version: %d.%d.%d\n", 
-           vm->version.major, vm->version.minor, vm->version.patch);
-    printf("State: %s\n", gcos_vm_state_to_string(vm->state));
-    printf("Exception: %s\n", gcos_vm_exception_to_string(vm->runtime.exception));
-    printf("\n--- Runtime Context ---\n");
-    printf("Stack Pointer: %u / %u\n", 
-           vm->runtime.stack_pointer, GCOS_EXECUTOR_STACK_SIZE);
-    printf("Indirect Stack Pointer: %u / %u\n",
-           vm->runtime.indirect_stack_pointer, GCOS_INDIRECT_STACK_SIZE);
-    printf("Global Data Used: %u / %u bytes\n",
-           vm->runtime.global_data_used, GCOS_GLOBAL_DATA_SIZE);
-    printf("Heap Used: %u / %u bytes\n",
-           vm->runtime.heap_used, GCOS_HEAP_SIZE);
-    printf("Program Counter: %u\n", vm->runtime.program_counter);
-    printf("\n--- Modules & Apps ---\n");
-    printf("Module Count: %u / %u\n", 
-           vm->module_count, GCOS_MAX_MODULES);
-    printf("App Count: %u / %u\n",
-           vm->app_count, GCOS_MAX_APPS);
-    printf("Current Channel: %u\n", vm->current_channel);
-    printf("\n--- Statistics ---\n");
-    printf("Instructions Executed: %llu\n", 
-           (unsigned long long)vm->stats.instructions_executed);
-    printf("Total Execution Time: %llu us\n",
-           (unsigned long long)vm->total_execution_time_us);
-    printf("=========================================\n\n");
+        
+    GCOS_PRINTF("\n========== GCOS VM Information ==========\n");
+    GCOS_PRINTF("Version: %d.%d.%d\n",
+                vm->version.major, vm->version.minor, vm->version.patch);
+    GCOS_PRINTF("State: %s\n", gcos_vm_state_to_string(vm->state));
+    GCOS_PRINTF("Exception: %s\n", gcos_vm_exception_to_string(vm->runtime.exception));
+    GCOS_PRINTF("\n--- Runtime Context ---\n");
+    GCOS_PRINTF("Stack Pointer: %u / %u\n",
+                vm->runtime.stack_pointer, GCOS_EXECUTOR_STACK_SIZE);
+    GCOS_PRINTF("Indirect Stack Pointer: %u / %u\n",
+                vm->runtime.indirect_stack_pointer, GCOS_INDIRECT_STACK_SIZE);
+    GCOS_PRINTF("Global Data Used: %u / %u bytes\n",
+                vm->runtime.global_data_used, GCOS_GLOBAL_DATA_SIZE);
+    GCOS_PRINTF("Heap Used: %u / %u bytes\n",
+                vm->runtime.heap_used, GCOS_HEAP_SIZE);
+    GCOS_PRINTF("Program Counter: %u\n", vm->runtime.program_counter);
+    GCOS_PRINTF("\n--- Modules & Apps ---\n");
+    GCOS_PRINTF("Module Count: %u / %u\n",
+                vm->module_count, GCOS_MAX_MODULES);
+    GCOS_PRINTF("App Count: %u / %u\n",
+                vm->app_count, GCOS_MAX_APPS);
+    GCOS_PRINTF("Current Channel: %u\n", vm->current_channel);
+    GCOS_PRINTF("\n--- Statistics ---\n");
+    GCOS_PRINTF("Instructions Executed: %llu\n",
+                (unsigned long long)vm->stats.instructions_executed);
+    GCOS_PRINTF("Total Execution Time: %llu us\n",
+                (unsigned long long)vm->total_execution_time_us);
+    GCOS_PRINTF("=========================================\n\n");
 }
 
 /* ============================================================================
- * API 实现 - 内存访问（安全版本）
+ * API Implementation - Memory Access (Safe Version)
  * ============================================================================ */
 
 /**
- * @brief 从执行器栈弹出值
- * @param vm VM实例
- * @param value 输出值
- * @return GCOSResult 成功，其他值失败
+ * @brief Pop value from executor stack
+ * @param vm VM instance
+ * @param value Output value
+ * @return GCOSResult Success or error code
  */
 GCOSResult gcos_vm_stack_pop(GCOSVM *vm, u32 *value) {
     if (vm == NULL || value == NULL) {
@@ -368,10 +368,10 @@ GCOSResult gcos_vm_stack_pop(GCOSVM *vm, u32 *value) {
 }
 
 /**
- * @brief 向执行器栈压入值
- * @param vm VM实例
- * @param value 要压入的值
- * @return GCOSResult 成功，其他值失败
+ * @brief Push value to executor stack
+ * @param vm VM instance
+ * @param value Value to push
+ * @return GCOSResult Success or error code
  */
 GCOSResult gcos_vm_stack_push(GCOSVM *vm, u32 value) {
     if (vm == NULL) {
@@ -407,7 +407,7 @@ u32 gcos_vm_heap_alloc(GCOSVM *vm, u32 size) {
     
     /* 检查是否有足够空间 */
     if (vm->runtime.heap_used + aligned_size > GCOS_HEAP_SIZE) {
-        printf("[GCOS VM] Heap allocation failed: insufficient space\n");
+        GCOS_PRINTF("[GCOS VM] Heap allocation failed: insufficient space\n");
         return 0;
     }
     
@@ -449,19 +449,19 @@ GCOSResult gcos_vm_heap_free(GCOSVM *vm, u32 addr) {
  */
 void gcos_vm_print_call_stack(const GCOSVM *vm) {
     if (vm == NULL) {
-        printf("[GCOS VM] Error: NULL VM pointer\n");
+        GCOS_PRINTF("[GCOS VM] Error: NULL VM pointer\n");
         return;
     }
     
-    printf("\n--- Call Stack ---\n");
-    printf("Frame Top: %u\n", vm->runtime.frame_top);
+    GCOS_PRINTF("\n--- Call Stack ---\n");
+    GCOS_PRINTF("Frame Top: %u\n", vm->runtime.frame_top);
     
     for (u32 i = 0; i < vm->runtime.frame_top && i < 64; i++) {
         const GCOSStackFrame *frame = &vm->runtime.frame_stack[i];
-        printf("Frame[%u]: ReturnAddr=%u, BasePtr=%u, Size=%u\n",
+        GCOS_PRINTF("Frame[%u]: ReturnAddr=%u, BasePtr=%u, Size=%u\n",
                i, frame->return_address, frame->base_pointer, frame->frame_size);
     }
-    printf("------------------\n\n");
+    GCOS_PRINTF("------------------\n\n");
 }
 
 /**
@@ -478,19 +478,19 @@ bool gcos_vm_validate(const GCOSVM *vm) {
     
     /* 检查栈指针范围 */
     if (vm->runtime.stack_pointer > GCOS_EXECUTOR_STACK_SIZE) {
-        printf("[GCOS VM] Validation Error: Stack pointer out of range\n");
+        GCOS_PRINTF("[GCOS VM] Validation Error: Stack pointer out of range\n");
         valid = false;
     }
     
     /* 检查间接栈指针范围 */
     if (vm->runtime.indirect_stack_pointer > GCOS_INDIRECT_STACK_SIZE) {
-        printf("[GCOS VM] Validation Error: Indirect stack pointer out of range\n");
+        GCOS_PRINTF("[GCOS VM] Validation Error: Indirect stack pointer out of range\n");
         valid = false;
     }
     
     /* 检查全局数据区使用量 */
     if (vm->runtime.global_data_used > GCOS_GLOBAL_DATA_SIZE) {
-        printf("[GCOS VM] Validation Error: Global data overflow\n");
+        GCOS_PRINTF("[GCOS VM] Validation Error: Global data overflow\n");
         valid = false;
     }
     

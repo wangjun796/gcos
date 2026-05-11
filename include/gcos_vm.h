@@ -1,17 +1,18 @@
 /**
  * @file gcos_vm.h
- * @brief GCOS VM - 基于COS3规范的国产智能卡虚拟机
+ * @brief GCOS VM - Domestic Smart Card Virtual Machine Based on COS3 Specification
  * 
  * GCOS VM (GuoChao Operating System Virtual Machine)
- * 基于 GB/T 44901.3《卡及身份识别安全设备片上操作系统第3部分》规范实现
+ * Implementation based on GB/T 44901.3 "Card and Identity Recognition Security Device 
+ * On-Chip Operating System Part 3" specification
  * 
- * 特性:
- * - 栈式字节码执行器 (弹栈-执行-压栈模型)
- * - 支持面向过程应用后下载
- * - 多通道应用隔离
- * - 事务管理机制
- * - 运行时安全管理
- * - 零动态内存分配 (适合嵌入式环境)
+ * Features:
+ * - Stack-based bytecode executor (Pop-Execute-Push model)
+ * - Support for procedural application post-download
+ * - Multi-channel application isolation
+ * - Transaction management mechanism
+ * - Runtime security management
+ * - Zero dynamic memory allocation (suitable for embedded environments)
  * 
  * @version 1.0.0
  * @date 2026-05-08
@@ -30,7 +31,7 @@ extern "C" {
 #endif
 
 /* ============================================================================
- * 版本信息
+ * Version Information
  * ============================================================================ */
 
 #define GCOS_VM_VERSION_MAJOR       1
@@ -39,7 +40,7 @@ extern "C" {
 #define GCOS_VM_VERSION             "1.0.0"
 
 /* ============================================================================
- * 基本类型定义
+ * Basic Type Definitions
  * ============================================================================ */
 
 typedef uint8_t     u8;
@@ -54,33 +55,33 @@ typedef float       f32;
 typedef double      f64;
 
 /* ============================================================================
- * 常量定义 - 基于COS3规范表39运行时数据区
+ * Constant Definitions - Based on COS3 Specification Table 39 Runtime Data Area
  * ============================================================================ */
 
-/* 执行器栈配置 (表39: 栈单元为4字节) */
-#define GCOS_EXECUTOR_STACK_SIZE        256     /* 执行器栈大小(单元数) */
-#define GCOS_STACK_UNIT_SIZE            4       /* 栈单元: 4字节 */
+/* Executor Stack Configuration (Table 39: Stack unit is 4 bytes) */
+#define GCOS_EXECUTOR_STACK_SIZE        256     /* Executor stack size (units) */
+#define GCOS_STACK_UNIT_SIZE            4       /* Stack unit: 4 bytes */
 
-/* 间接访问变量栈 (表39: 栈单元为16字节) */
-#define GCOS_INDIRECT_STACK_SIZE        64      /* 间接访问变量栈大小(单元数) */
-#define GCOS_INDIRECT_UNIT_SIZE         16      /* 间接单元: 16字节 */
+/* Indirect Variable Stack (Table 39: Stack unit is 16 bytes) */
+#define GCOS_INDIRECT_STACK_SIZE        64      /* Indirect variable stack size (units) */
+#define GCOS_INDIRECT_UNIT_SIZE         16      /* Indirect unit: 16 bytes */
 
-/* 全局数据区 (易失性存储区) */
-#define GCOS_GLOBAL_DATA_SIZE           4096    /* 全局数据区大小(字节) */
+/* Global Data Area (Volatile storage area) */
+#define GCOS_GLOBAL_DATA_SIZE           4096    /* Global data area size (bytes) */
 
-/* 堆 (非易失性存储区) */
-#define GCOS_HEAP_SIZE                  8192    /* 堆大小(字节) */
+/* Heap (Non-volatile storage area) */
+#define GCOS_HEAP_SIZE                  8192    /* Heap size (bytes) */
 
-/* 模块程序区 (非易失性存储区) */
-#define GCOS_MODULE_CODE_SIZE           16384   /* 模块程序区大小(字节) */
+/* Module Program Area (Non-volatile storage area) */
+#define GCOS_MODULE_CODE_SIZE           16384   /* Module program area size (bytes) */
 
-/* 文件类型标识符 (COS3规范表10) */
-#define FILE_TYPE_ASM                   0x0061736D  /* "asm" - 中间文件 */
-#define FILE_TYPE_LINK                  0x6C696E6B  /* "link" - 链接文件 */
-#define FILE_TYPE_SEF                   0x00736566  /* "sef" - 可加载文件 */
+/* File Type Identifiers (COS3 Specification Table 10) */
+#define FILE_TYPE_ASM                   0x0061736D  /* "asm" - Intermediate file */
+#define FILE_TYPE_LINK                  0x6C696E6B  /* "link" - Link file */
+#define FILE_TYPE_SEF                   0x00736566  /* "sef" - Loadable file */
 
-/* 段标识符 (COS3规范表18) */
-#define SECTION_ID_FIRST                0x01    /* 首段 (必选) */
+/* Section Identifiers (COS3 Specification Table 18) */
+#define SECTION_ID_FIRST                0x01    /* First section (required) */
 #define SECTION_ID_IMPORT               0x02    /* 导入段 (可选) */
 #define SECTION_ID_FUNCTION             0x03    /* 函数段 (必选) */
 #define SECTION_ID_APP                  0x04    /* 应用段 (可选) */
