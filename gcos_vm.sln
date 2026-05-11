@@ -1,0 +1,10 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42D3-11D2-8B70-ADBC5}") = "gcos_vm.vcxproj", "gcos_vm.vcxproj", "{8BC9CEB-8B4A-11D0-8D08-00A24C21EBF}"
+GlobalSection(GlobalSection="{1DD31337-1D24-39E0-8944-7A79FF306E}") = "PreBuildEvent"
+EndGlobalSection
+GlobalSection(GlobalSection="{FAE04EC0-301F-4D5-B544-637E0ABEAB}") = "PostBuildEvent"
+EndGlobalSection

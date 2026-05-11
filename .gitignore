@@ -1,0 +1,36 @@
+# 构建产物
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.lib
+*.a
+
+# IDE配置
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# 测试输出
+*.log
+*.txt
+!README.md
+
+# 临时文件
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
