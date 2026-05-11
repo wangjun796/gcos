@@ -97,10 +97,11 @@ typedef double      f64;
 /* 系统限制 (COS3规范) */
 #define MAX_MODULES                     32      /* 最大模块数 */
 #define MAX_APPS_PER_MODULE             16      /* 每模块最大应用数 */
-#define MAX_FUNCTIONS                   256     /* 最大函数数 */
-#define MAX_CHANNELS                    8       /* 最大逻辑通道数 (COS3规范) */
-#define MAX_IMPORT_MODULES              31      /* 最大导入模块数 (表19) */
-#define AID_MAX_LENGTH                  16      /* AID最大长度 */
+#define MAX_FUNCTIONS                   256     /* Maximum functions */
+#define MAX_CHANNELS                    8       /* Maximum logical channels (COS3 spec) */
+#define MAX_IMPORT_MODULES              31      /* Maximum import modules (Table 19) */
+#define AID_MAX_LENGTH                  16      /* Maximum AID length */
+#define GCOS_MAX_FRAME_DEPTH            64      /* Maximum call stack depth */
 
 /* 操作码范围 (COS3规范表41) */
 #define OPCODE_SINGLE_BYTE_MIN          0x00    /* 单字节操作码最小值 */
@@ -206,6 +207,7 @@ typedef enum {
     /* 事务异常 */
     EXCEPTION_TRANSACTION_ABORT,    /* 事务中止 */
     EXCEPTION_TRANSACTION_NESTING,  /* 事务嵌套过深 */
+    EXCEPTION_TRANSACTION_OVERFLOW, /* 事务溢出 */
     
     /* 安全异常 */
     EXCEPTION_SECURITY_VIOLATION,   /* 安全违例 */
@@ -231,6 +233,30 @@ typedef enum {
 } GCOSAppLifecycleState;
 
 /**
+ * @brief Application information structure
+ */
+typedef struct {
+    u32 app_id;                     /* Application ID */
+    GCOSAppLifecycleState state;    /* Application lifecycle state */
+    u8 priority;                    /* Priority level */
+    u8 aid_length;                  /* AID length */
+    u8 aid[AID_MAX_LENGTH];         /* Application ID bytes */
+    u32 runtime_data_offset;        /* Runtime data offset */
+    u32 runtime_data_size;          /* Runtime data size */
+} GCOSAppInfo;
+
+/**
+ * @brief Module information structure
+ */
+typedef struct {
+    u16 module_id;                  /* Module ID */
+    u32 function_count;             /* Number of functions */
+    u32 import_count;               /* Number of imports */
+    u8 app_count;                   /* Number of applications */
+    u32 code_offset;                /* Code section offset */
+} GCOSModuleInfo;
+
+/**
  * @brief 返回码
  */
 typedef enum {
@@ -249,6 +275,16 @@ typedef enum {
     GCOS_ERR_EXCEPTION = -12,       /* 异常 */
     GCOS_ERR_NOT_IMPLEMENTED = -99  /* 未实现 */
 } GCOSResult;
+
+/**
+ * @brief Memory access type for security validation
+ */
+typedef enum {
+    GCOS_MEMORY_ACCESS_STACK = 0,     /* Stack access */
+    GCOS_MEMORY_ACCESS_GLOBAL = 1,    /* Global data access */
+    GCOS_MEMORY_ACCESS_HEAP = 2,      /* Heap access */
+    GCOS_MEMORY_ACCESS_CODE = 3       /* Code access */
+} GCOSMemoryAccessType;
 
 /* ============================================================================
  * 兼容性宏定义 (用于简化代码编写)
@@ -283,6 +319,14 @@ typedef enum {
 #define GCOS_EXCEPTION_MEMORY_ACCESS       EXCEPTION_ACCESS_VIOLATION
 #define GCOS_EXCEPTION_TRANSACTION_ABORT   EXCEPTION_TRANSACTION_ABORT
 #define GCOS_EXCEPTION_SECURITY_VIOLATION  EXCEPTION_SECURITY_VIOLATION
+
+/* GCOSAppLifecycleState 别名 (for compatibility) */
+#define GCOS_APP_STATE_INSTALLED        APP_LIFECYCLE_INSTALLED
+#define GCOS_APP_STATE_SELECTABLE       APP_LIFECYCLE_SELECTABLE
+#define GCOS_APP_STATE_SELECTED         APP_LIFECYCLE_SELECTED
+#define GCOS_APP_STATE_PERSONALIZED     APP_LIFECYCLE_PERSONALIZED
+#define GCOS_APP_STATE_LOCKED           APP_LIFECYCLE_LOCKED
+#define GCOS_APP_STATE_TERMINATED       APP_LIFECYCLE_TERMINATED
 
 /* 其他常量 */
 #define GCOS_INVALID_INDEX          0xFF
@@ -454,6 +498,8 @@ struct GCOSAppInstance {
  */
 typedef struct {
     bool active;                    /* 事务是否激活 */
+    bool in_transaction;            /* 是否在事务中 */
+    u8 transaction_depth;           /* 事务嵌套深度 */
     u8 *backup_data;                /* 备份数据指针 */
     u32 backup_size;                /* 备份大小 */
     u32 checkpoint_count;           /* 检查点数量 */
@@ -502,11 +548,12 @@ struct GCOSRuntimeContext {
     u8 heap[GCOS_HEAP_SIZE];
     u32 heap_used;                  /* 堆已使用大小 */
     
-    /* 程序计数器 */
-    u32 program_counter;            /* PC - 当前指令地址 */
+    /* Module code area (non-volatile) */
+    u8 module_code[GCOS_MODULE_CODE_SIZE];  /* Module code storage */
+    u32 code_size;                  /* Code area used size */
     
-    /* 模块代码区 */
-    u32 code_size;                  /* 代码区已使用大小 */
+    /* Program counter */
+    u32 program_counter;            /* PC - current instruction address */
     
     /* 当前运行上下文 */
     GCOSModule *current_module;     /* 当前模块 */
@@ -879,48 +926,279 @@ void gcos_vm_print_stack(const GCOSVM *vm);
  */
 void gcos_vm_print_module_info(const GCOSVM *vm, u8 module_index);
 
+/* --- 指令集执行 --- */
+
+/**
+ * @brief Execute a single instruction
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_instruction_execute(GCOSVM *vm);
+
+/* --- SEF Loader --- */
+
+/**
+ * @brief Load SEF (Secure Executable Format) file
+ * @param vm VM instance
+ * @param sef_data SEF file data
+ * @param sef_size SEF file size
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_loader_load_sef(GCOSVM *vm, const u8 *sef_data, u32 sef_size);
+
+/**
+ * @brief Validate loaded module
+ * @param vm VM instance
+ * @param module_index Module index
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_loader_validate_module(const GCOSVM *vm, u8 module_index);
+
+/**
+ * @brief Get module information
+ * @param vm VM instance
+ * @param module_index Module index
+ * @param[out] info Module information structure
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_loader_get_module_info(const GCOSVM *vm, u8 module_index, 
+                                       GCOSModuleInfo *info);
+
+/* --- Transaction Management --- */
+
+/**
+ * @brief Begin transaction
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_transaction_begin(GCOSVM *vm);
+
+/**
+ * @brief Commit transaction
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_transaction_commit(GCOSVM *vm);
+
+/**
+ * @brief Abort transaction (rollback)
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_transaction_abort(GCOSVM *vm);
+
+/**
+ * @brief Check if in transaction
+ * @param vm VM instance
+ * @return true if in transaction, false otherwise
+ */
+bool gcos_vm_in_transaction(const GCOSVM *vm);
+
+/**
+ * @brief Get transaction depth
+ * @param vm VM instance
+ * @return Transaction depth
+ */
+u8 gcos_vm_get_transaction_depth(const GCOSVM *vm);
+
+/* --- Application Manager --- */
+
+/**
+ * @brief Install application
+ * @param vm VM instance
+ * @param aid Application ID
+ * @param aid_length AID length
+ * @param install_data Installation parameters
+ * @param install_data_size Installation data size
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_install_app(GCOSVM *vm, const u8 *aid, u8 aid_length,
+                               const u8 *install_data, u32 install_data_size);
+
+/**
+ * @brief Delete application
+ * @param vm VM instance
+ * @param app_index Application index
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_delete_app(GCOSVM *vm, u8 app_index);
+
+/**
+ * @brief Select application
+ * @param vm VM instance
+ * @param aid Application ID
+ * @param aid_length AID length
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_select_app(GCOSVM *vm, const u8 *aid, u8 aid_length);
+
+/**
+ * @brief Deselect current application
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_deselect_app(GCOSVM *vm);
+
+/**
+ * @brief Personalize application
+ * @param vm VM instance
+ * @param app_index Application index
+ * @param personalization_data Personalization data
+ * @param data_size Data size
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_personalize_app(GCOSVM *vm, u8 app_index,
+                                   const u8 *personalization_data, u32 data_size);
+
+/**
+ * @brief Lock application
+ * @param vm VM instance
+ * @param app_index Application index
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_lock_app(GCOSVM *vm, u8 app_index);
+
+/**
+ * @brief Get application information
+ * @param vm VM instance
+ * @param app_index Application index
+ * @param[out] info Application information structure
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_get_app_info(const GCOSVM *vm, u8 app_index, GCOSAppInfo *info);
+
+/**
+ * @brief Switch to channel
+ * @param vm VM instance
+ * @param channel Channel number
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_switch_channel(GCOSVM *vm, u8 channel);
+
+/**
+ * @brief Activate channel
+ * @param vm VM instance
+ * @param channel Channel number
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_activate_channel(GCOSVM *vm, u8 channel);
+
+/**
+ * @brief Deactivate channel
+ * @param vm VM instance
+ * @param channel Channel number
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_vm_deactivate_channel(GCOSVM *vm, u8 channel);
+
+/**
+ * @brief Get active channel count
+ * @param vm VM instance
+ * @return Active channel count
+ */
+u8 gcos_vm_get_active_channel_count(const GCOSVM *vm);
+
+/**
+ * @brief Get current channel
+ * @param vm VM instance
+ * @return Current channel number
+ */
+u8 gcos_vm_get_current_channel(const GCOSVM *vm);
+
+/**
+ * @brief Get selected application on current channel
+ * @param vm VM instance
+ * @return Selected app instance or NULL
+ */
+GCOSAppInstance* gcos_vm_get_selected_app(GCOSVM *vm);
+
+/* --- Security Management --- */
+
+/**
+ * @brief Initialize security manager
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_init(GCOSVM *vm);
+
+/**
+ * @brief Set current domain
+ * @param vm VM instance
+ * @param domain_id Domain ID
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_set_domain(GCOSVM *vm, u8 domain_id);
+
+/**
+ * @brief Get current domain
+ * @param vm VM instance
+ * @return Current domain ID
+ */
+u8 gcos_security_get_current_domain(const GCOSVM *vm);
+
+/**
+ * @brief Grant access to interface
+ * @param vm VM instance
+ * @param interface_id Interface ID
+ * @param domain_mask Domain mask
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_grant_access(GCOSVM *vm, u8 interface_id, u8 domain_mask);
+
+/**
+ * @brief Revoke access to interface
+ * @param vm VM instance
+ * @param interface_id Interface ID
+ * @param domain_mask Domain mask
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_revoke_access(GCOSVM *vm, u8 interface_id, u8 domain_mask);
+
+/**
+ * @brief Check permission for interface
+ * @param vm VM instance
+ * @param interface_id Interface ID
+ * @return true if authorized, false otherwise
+ */
+bool gcos_security_check_permission(const GCOSVM *vm, u8 interface_id);
+
+/**
+ * @brief Validate memory access
+ * @param vm VM instance
+ * @param address Memory address
+ * @param size Access size
+ * @param access_type Access type
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_validate_memory_access(const GCOSVM *vm, u32 address, u32 size,
+                                                GCOSMemoryAccessType access_type);
+
+/**
+ * @brief Verify caller authorization
+ * @param vm VM instance
+ * @param caller_address Caller address
+ * @param target_address Target address
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_verify_caller(const GCOSVM *vm, u16 caller_address,
+                                       u16 target_address);
+
+/**
+ * @brief Setup application isolation
+ * @param vm VM instance
+ * @param app_index Application index
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_security_setup_app_isolation(GCOSVM *vm, u8 app_index);
+
+/**
+ * @brief Dump authorization table (debug)
+ * @param vm VM instance
+ */
+void gcos_security_dump_authorization_table(const GCOSVM *vm);
+
 #ifdef __cplusplus
 }
 #endif
-
-/* ============================================================================
- * 兼容性宏定义 (用于简化代码编写)
- * ============================================================================ */
-
-/* GCOSResult 别名 */
-#define GCOS_SUCCESS                GCOS_OK
-#define GCOS_ERROR_NULL_POINTER     GCOS_ERR_INVALID_PARAM
-#define GCOS_ERROR_INVALID_PARAM    GCOS_ERR_INVALID_PARAM
-#define GCOS_ERROR_INIT_FAILED      GCOS_ERR_OUT_OF_MEMORY
-#define GCOS_ERROR_STACK_OVERFLOW   GCOS_ERR_STACK_OVERFLOW
-#define GCOS_ERROR_STACK_UNDERFLOW  GCOS_ERR_STACK_UNDERFLOW
-#define GCOS_ERROR_MEMORY_ACCESS    GCOS_ERR_ACCESS_DENIED
-#define GCOS_ERROR_INVALID_STATE    GCOS_ERR_INVALID_PARAM
-#define GCOS_ERROR_BREAKPOINT_LIMIT GCOS_ERR_OUT_OF_MEMORY
-#define GCOS_ERROR_NOT_FOUND        GCOS_ERR_APP_NOT_FOUND
-#define GCOS_ERROR_VALIDATION_FAILED GCOS_ERR_INVALID_PARAM
-
-/* GCOSState 别名 */
-#define GCOS_VM_STATE_IDLE          GCOS_STATE_IDLE
-#define GCOS_VM_STATE_RUNNING       GCOS_STATE_RUNNING
-#define GCOS_VM_STATE_SUSPENDED     GCOS_STATE_SUSPENDED
-#define GCOS_VM_STATE_ERROR         GCOS_STATE_EXCEPTION
-#define GCOS_VM_STATE_EXCEPTION     GCOS_STATE_EXCEPTION
-
-/* GCOSExceptionType 别名 */
-#define GCOS_EXCEPTION_NONE                EXCEPTION_NONE
-#define GCOS_EXCEPTION_STACK_OVERFLOW      EXCEPTION_STACK_OVERFLOW
-#define GCOS_EXCEPTION_STACK_UNDERFLOW     EXCEPTION_STACK_UNDERFLOW
-#define GCOS_EXCEPTION_DIVISION_BY_ZERO    EXCEPTION_DIVISION_BY_ZERO
-#define GCOS_EXCEPTION_INVALID_OPCODE      EXCEPTION_INVALID_OPCODE
-#define GCOS_EXCEPTION_MEMORY_ACCESS       EXCEPTION_ACCESS_VIOLATION
-#define GCOS_EXCEPTION_TRANSACTION_ABORT   EXCEPTION_TRANSACTION_ABORT
-#define GCOS_EXCEPTION_SECURITY_VIOLATION  EXCEPTION_SECURITY_VIOLATION
-
-/* 其他常量 */
-#define GCOS_INVALID_INDEX          0xFF
-#define GCOS_MAX_MODULES            MAX_MODULES
-#define GCOS_MAX_APPS               (MAX_MODULES * MAX_APPS_PER_MODULE)
-#define GCOS_MAX_CHANNELS           MAX_CHANNELS
 
 #endif /* GCOS_VM_H */

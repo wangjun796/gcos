@@ -1,3 +1,8 @@
 E:\views\gcos\prog\cos\gcos_vm\src\gcos_vm.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_vm.obj
 E:\views\gcos\prog\cos\gcos_vm\src\gcos_executor.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_executor.obj
 E:\views\gcos\prog\cos\gcos_vm\src\gcos_memory.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_memory.obj
+E:\views\gcos\prog\cos\gcos_vm\src\gcos_instructions.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_instructions.obj
+E:\views\gcos\prog\cos\gcos_vm\src\gcos_loader.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_loader.obj
+E:\views\gcos\prog\cos\gcos_vm\src\gcos_transaction.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_transaction.obj
+E:\views\gcos\prog\cos\gcos_vm\src\gcos_app_manager.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_app_manager.obj
+E:\views\gcos\prog\cos\gcos_vm\src\gcos_security.c;E:\views\gcos\prog\cos\gcos_vm\build_test\vm_core.dir\Debug\gcos_security.obj

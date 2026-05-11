@@ -44,17 +44,17 @@ extern "C" {
 #define OP_CALL_INDIRECT    0x0D    /* call.indirect - 间接调用 */
 
 /* --- 数值指令 - 常量 (0x18-0x22) --- */
-#define OP_LDC_0            0x18    /* ldc.0 - 加载常量0 */
-#define OP_LDC_1            0x19    /* ldc.1 - 加载常量1 */
-#define OP_LDC_2            0x1A    /* ldc.2 - 加载常量2 */
-#define OP_LDC_3            0x1B    /* ldc.3 - 加载常量3 */
-#define OP_LDC_4            0x1C    /* ldc.4 - 加载常量4 */
-#define OP_LDC_5            0x1D    /* ldc.5 - 加载常量5 */
-#define OP_LDC_6            0x1E    /* ldc.6 - 加载常量6 */
-#define OP_LDC_7            0x1F    /* ldc.7 - 加载常量7 */
-#define OP_LDC_8            0x20    /* ldc.8 - 加载常量8 */
-#define OP_LDC_I32          0x21    /* ldc.i32 - 加载32位整数常量 */
-#define OP_LDC_M1           0x22    /* ldc.m1 - 加载常量-1 */
+#define OP_LDC_0            0x18    /* ldc.0 - load constant 0 */
+#define OP_LDC_1            0x19    /* ldc.1 - load constant 1 */
+#define OP_LDC_2            0x1A    /* ldc.2 - load constant 2 */
+#define OP_LDC_3            0x1B    /* ldc.3 - load constant 3 */
+#define OP_LDC_4            0x1C    /* ldc.4 - load constant 4 */
+#define OP_LDC_5            0x1D    /* ldc.5 - load constant 5 */
+#define OP_LDC_6            0x1E    /* ldc.6 - load constant 6 */
+#define OP_LDC_7            0x1F    /* ldc.7 - load constant 7 */
+#define OP_LDC_8            0x20    /* ldc.8 - load constant 8 */
+#define OP_LDC_I32          0x21    /* ldc.i32 - load 32-bit integer constant */
+#define OP_LDC_M1           0x22    /* ldc.m1 - load constant -1 */
 
 /* --- 数值指令 - 算术运算 (0x27-0x35) --- */
 #define OP_ADD              0x27    /* add - 加法 */
@@ -155,79 +155,11 @@ extern "C" {
 #define OP_CALLEX_U8         0x14    /* callex.u8 - 调用外部函数 */
 #define OP_CALLIN_U8         0x15    /* callin.u8 - 调用内部函数 */
 #define OP_CALL_U16          0x16    /* call.u16 - 调用函数 */
-#define OP_CALLIND          0x17    /* callind - 间接调用 */
+#define OP_CALLIND          0x17    /* callind - indirect call */
 
-/* --- 数值指令 - 常量 (0x20-0x3F) --- */
-#define OP_CONST_I32        0x20    /* const.i32 - 32位整数常量 */
-#define OP_CONST_I16        0x21    /* const.i16 - 16位整数常量 */
-#define OP_CONST_I8         0x22    /* const.i8 - 8位整数常量 */
-#define OP_CONST_U32        0x23    /* const.u32 - 32位无符号常量 */
-#define OP_CONST_U16        0x24    /* const.u16 - 16位无符号常量 */
-#define OP_CONST_U8         0x25    /* const.u8 - 8位无符号常量 */
-
-/* --- 数值指令 - 算术运算 (0x40-0x5F) --- */
-#define OP_ADD              0x40    /* add - 加法 */
-#define OP_SUB              0x41    /* sub - 减法 */
-#define OP_MUL              0x42    /* mul - 乘法 */
-#define OP_DIV              0x43    /* div - 除法 */
-#define OP_MOD              0x44    /* mod - 取模 */
-#define OP_NEG              0x45    /* neg - 取负 */
-
-#define OP_ADD_OVF          0x46    /* add.ovf - 带溢出检查加法 */
-#define OP_SUB_OVF          0x47    /* sub.ovf - 带溢出检查减法 */
-#define OP_MUL_OVF          0x48    /* mul.ovf - 带溢出检查乘法 */
-
-/* --- 数值指令 - 位运算 (0x60-0x7F) --- */
-#define OP_AND              0x60    /* and - 按位与 */
-#define OP_OR               0x61    /* or - 按位或 */
-#define OP_XOR              0x62    /* xor - 按位异或 */
-#define OP_NOT              0x63    /* not - 按位取反 */
-#define OP_SHL              0x64    /* shl - 左移 */
-#define OP_SHR              0x65    /* shr - 右移(算术) */
-#define OP_SHRU             0x66    /* shr.u - 右移(逻辑) */
-
-/* --- 数值指令 - 比较 (0x80-0x9F) --- */
-#define OP_EQ               0x80    /* eq - 等于 */
-#define OP_NE               0x81    /* ne - 不等于 */
-#define OP_LT               0x82    /* lt - 小于 */
-#define OP_GT               0x83    /* gt - 大于 */
-#define OP_LE               0x84    /* le - 小于等于 */
-#define OP_GE               0x85    /* ge - 大于等于 */
-#define OP_LTU              0x86    /* lt.u - 小于(无符号) */
-#define OP_GTU              0x87    /* gt.u - 大于(无符号) */
-#define OP_LEU              0x88    /* le.u - 小于等于(无符号) */
-#define OP_GEU              0x89    /* ge.u - 大于等于(无符号) */
-
-/* --- 变量指令 (0xA0-0xBF) --- */
-#define OP_LOAD_T2_C6       0xA0    /* load.t2_c6 - 加载局部变量(2位索引+6位常量) */
-#define OP_LOAD_T4_C12      0xA1    /* load.t4_c12 - 加载局部变量(4位索引+12位常量) */
-#define OP_LOAD_T8          0xA2    /* load.t8 - 加载局部变量(8位索引) */
-#define OP_LOAD_T16         0xA3    /* load.t16 - 加载局部变量(16位索引) */
-
-#define OP_STORE_T2_C6      0xB0    /* store.t2_c6 - 存储局部变量 */
-#define OP_STORE_T4_C12     0xB1    /* store.t4_c12 - 存储局部变量 */
-#define OP_STORE_T8         0xB2    /* store.t8 - 存储局部变量 */
-#define OP_STORE_T16        0xB3    /* store.t16 - 存储局部变量 */
-
-/* --- 内存指令 (0xC0-0xDF) --- */
-#define OP_LOAD_A8          0xC0    /* load.a8 - 从地址加载(8位地址) */
-#define OP_LOAD_A16         0xC1    /* load.a16 - 从地址加载(16位地址) */
-#define OP_LOAD_A32         0xC2    /* load.a32 - 从地址加载(32位地址) */
-
-#define OP_STORE_A8         0xD0    /* store.a8 - 存储到地址(8位地址) */
-#define OP_STORE_A16        0xD1    /* store.a16 - 存储到地址(16位地址) */
-#define OP_STORE_A32        0xD2    /* store.a32 - 存储到地址(32位地址) */
-
-#define OP_LOADBASE_A16     0xD3    /* loadbase.a16 - 基址+偏移加载 */
-#define OP_STOREBASE_A16    0xD4    /* storebase.a16 - 基址+偏移存储 */
-
-/* --- 异常处理指令 (0xE0-0xEF) --- */
-#define OP_THROW            0xE0    /* throw - 抛出异常 */
-#define OP_TRY              0xE1    /* try - 尝试块开始 */
-#define OP_CATCH            0xE2    /* catch - 捕获异常 */
-#define OP_ENDTRY           0xE3    /* endtry - 尝试块结束 */
-
-/* --- 复合指令 (0xF0-0xFB) --- */
+/* ============================================================================
+ * Additional Instructions (Reserved for future use)
+ * ============================================================================ */
 #define OP_DUP              0xF0    /* dup - 复制栈顶 */
 #define OP_SWAP             0xF1    /* swap - 交换栈顶两个元素 */
 #define OP_OVER             0xF2    /* over - 复制次栈顶到栈顶 */

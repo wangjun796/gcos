@@ -10,6 +10,21 @@
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_memory.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_instructions.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_loader.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_transaction.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_app_manager.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_security.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="E:\views\gcos\prog\cos\gcos_vm\CMakeLists.txt" />
