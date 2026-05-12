@@ -63,4 +63,28 @@ void gcos_transport_cleanup(void);
  */
 TransportMode gcos_transport_get_mode(void);
 
+/* ============================================================================
+ * Low-Level Byte I/O (for TLP224 encoding/decoding)
+ * ============================================================================ */
+
+/**
+ * @brief Send a single byte via transport layer
+ * 
+ * Used by TLP224 encoding to send ASCII hex characters.
+ * 
+ * @param byte  Byte to send
+ * @return      0 on success, -1 on error
+ */
+s8 gcos_transport_send_byte(u8 byte);
+
+/**
+ * @brief Receive a single byte from transport layer
+ * 
+ * Used by TLP224 decoding to receive ASCII hex characters.
+ * 
+ * @param byte  Pointer to store received byte
+ * @return      0 on success, -1 on error
+ */
+s8 gcos_transport_receive_byte(u8 *byte);
+
 #endif /* GCOS_TRANSPORT_H */

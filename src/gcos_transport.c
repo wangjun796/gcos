@@ -372,3 +372,88 @@ void gcos_transport_cleanup(void) {
 TransportMode gcos_transport_get_mode(void) {
     return current_mode;
 }
+
+/* ============================================================================
+ * Low-Level Byte I/O Implementation (for TLP224)
+ * ============================================================================ */
+
+s8 gcos_transport_send_byte(u8 byte) {
+    switch (current_mode) {
+        case TRANSPORT_MODE_STDIO: {
+            /* In STDIO mode, print the character directly */
+            putchar((char)byte);
+            fflush(stdout);
+            return 0;
+        }
+            
+        case TRANSPORT_MODE_TCP_SERVER: {
+#ifdef GCOS_PLATFORM_WIN32
+            if (socket_fd == -1) {
+                return -1;
+            }
+            
+            int n = send(socket_fd, (const char*)&byte, 1, 0);
+            return (n == 1) ? 0 : -1;
+#else
+            if (socket_fd == -1) {
+                return -1;
+            }
+            
+            ssize_t n = write(socket_fd, &byte, 1);
+            return (n == 1) ? 0 : -1;
+#endif
+        }
+            
+        default:
+            return -1;
+    }
+}
+
+s8 gcos_transport_receive_byte(u8 *byte) {
+    if (byte == NULL) {
+        return -1;
+    }
+    
+    switch (current_mode) {
+        case TRANSPORT_MODE_STDIO: {
+            /* In STDIO mode, read a single character */
+            int c = getchar();
+            if (c == EOF) {
+                return -1;
+            }
+            *byte = (u8)c;
+            return 0;
+        }
+            
+        case TRANSPORT_MODE_TCP_SERVER: {
+#ifdef GCOS_PLATFORM_WIN32
+            if (socket_fd == -1) {
+                return -1;
+            }
+            
+            char c;
+            int n = recv(socket_fd, &c, 1, 0);
+            if (n != 1) {
+                return -1;
+            }
+            *byte = (u8)(c & 0xFF);
+            return 0;
+#else
+            if (socket_fd == -1) {
+                return -1;
+            }
+            
+            char c;
+            ssize_t n = read(socket_fd, &c, 1);
+            if (n != 1) {
+                return -1;
+            }
+            *byte = (u8)(c & 0xFF);
+            return 0;
+#endif
+        }
+            
+        default:
+            return -1;
+    }
+}

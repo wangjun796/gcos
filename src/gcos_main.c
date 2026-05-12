@@ -13,6 +13,9 @@
 #include "gcos_vm.h"
 #include "gcos_apdu.h"
 #include "gcos_transport.h"
+#include "gcos_tlp.h"
+#include "gcos_t0_protocol.h"
+#include "gcos_jcshell.h"  /* JCShell server (NEW) */
 #include <stdio.h>
 #include <string.h>
 
@@ -74,50 +77,65 @@ static GCOSResult initialize_vm(void) {
 }
 
 /**
- * @brief Process a single APDU command
+ * @brief Process a single APDU command using complete T=0 protocol
  * 
- * This is the core processing function that receives, processes,
- * and responds to APDU commands using the real transport layer.
+ * This function implements the full T=0 protocol flow:
+ * 1. Receive APDU header (5 bytes: CLA INS P1 P2 P3)
+ * 2. Receive command data (if Lc > 0)
+ * 3. Process command via VM
+ * 4. Send response data (if any)
+ * 5. Send status word (SW1SW2)
+ * 
+ * Based on cref's t0.c processing loop.
  * 
  * @return 1 if processing should continue, 0 to exit
  */
 static int process_single_apdu(void) {
-    /* Step 1: Receive APDU from terminal via transport layer */
-    u16 apdu_length = gcos_transport_receive_apdu(apdu_input_buffer, APDU_BUFFER_SIZE);
+    u8 apdu_buffer[APDU_BUFFER_SIZE];
+    u16 apdu_length;
+    u8 response_data[RESPONSE_BUFFER_SIZE];
+    u16 response_length = 0;
+    u16 sw = 0x9000;    /* Default success status */
+    
+    /* ========================================================================
+     * Step 1: Receive APDU from transport layer
+     * ======================================================================== */
+    apdu_length = gcos_transport_receive_apdu(apdu_buffer, APDU_BUFFER_SIZE);
     if (apdu_length == 0) {
-        printf("[GCOS] Connection closed or EOF\n");
+        printf("[GCOS] No more APDUs to process\n");
         return 0; /* Exit */
     }
     
-    /* Log received APDU */
-    printf("[GCOS] Received APDU (%u bytes): ", apdu_length);
-    for (u16 i = 0; i < apdu_length && i < 32; i++) {
-        printf("%02X ", apdu_input_buffer[i]);
+    if (apdu_length < 4) {
+        printf("[GCOS] ERROR: APDU too short (%u bytes)\n", apdu_length);
+        return 1; /* Continue */
     }
-    if (apdu_length > 32) {
-        printf("...");
+    
+    printf("[T=0] Received APDU (%u bytes): ", apdu_length);
+    for (u16 i = 0; i < apdu_length && i < 20; i++) {
+        printf("%02X", apdu_buffer[i]);
     }
+    if (apdu_length > 20) printf("...");
     printf("\n");
     
-    /* Step 2: Process APDU through VM */
-    u16 response_length = RESPONSE_BUFFER_SIZE;
-    u16 sw = gcos_vm_process_apdu(&vm_instance, 
-                                   apdu_input_buffer, 
-                                   apdu_length,
-                                   response_buffer, 
-                                   &response_length);
+    /* ========================================================================
+     * Step 2: Process APDU via GCOS VM
+     * ======================================================================== */
+    response_length = RESPONSE_BUFFER_SIZE;
+    sw = gcos_vm_process_apdu(&vm_instance, 
+                               apdu_buffer, 
+                               apdu_length,
+                               response_data, 
+                               &response_length);
     
-    /* Step 3: Send response back via transport layer */
-    gcos_transport_send_response(response_buffer, response_length, sw);
+    printf("[GCOS] VM returned SW=%04X, Response length=%u\n", sw, response_length);
     
-    /* Step 4: Log result */
-    if (sw == 0x9000) {
-        printf("[GCOS] ✓ Command executed successfully\n");
-    } else {
-        printf("[GCOS] ✗ Command failed with status %04X\n", sw);
-    }
+    /* ========================================================================
+     * Step 3: Send Response
+     * ======================================================================== */
+    gcos_transport_send_response(response_data, response_length, sw);
     
-    printf("\n");
+    printf("[T=0] Command processing complete\n\n");
     
     return 1; /* Continue processing */
 }
@@ -215,6 +233,24 @@ int main(int argc, char *argv[]) {
         gcos_vm_destroy(&vm_instance);
         return 1;
     }
+    
+    /* Step 2b: Initialize JCShell server (cref-compatible) */
+    printf("\n[JCShell] Initializing JCShell server...\n");
+    result = gcos_jcshell_init();
+    if (result != GCOS_SUCCESS) {
+        printf("[JCShell] WARNING: Failed to initialize JCShell server\n");
+    } else {
+        result = gcos_jcshell_start();
+        if (result != GCOS_SUCCESS) {
+            printf("[JCShell] WARNING: Failed to start JCShell server\n");
+        } else {
+            printf("[JCShell] Server started on ports 9000 (contacted) and 9900 (contactless)\n");
+        }
+    }
+    
+    /* Step 3: Initialize TLP and T=0 protocol layers */
+    printf("\n[T=0] Initializing TLP and T=0 protocol layers...\n");
+    t0_protocol_init(&g_tlp_msg);
     
     printf("\n[GCOS] Entering main processing loop...\n");
     printf("[GCOS] Waiting for APDU commands...\n\n");

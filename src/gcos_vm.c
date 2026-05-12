@@ -528,3 +528,17 @@ void gcos_vm_get_version_info(u8 *major, u8 *minor, u8 *patch) {
     if (minor != NULL) *minor = GCOS_VM_VERSION_MINOR;
     if (patch != NULL) *patch = GCOS_VM_VERSION_PATCH;
 }
+
+/**
+ * @brief Get global VM instance pointer
+ * 
+ * Used by JCShell server and other modules that need access to the VM.
+ * 
+ * @return Pointer to global VM instance, or NULL if not initialized
+ */
+GCOSVM* gcos_vm_get_instance(void) {
+    if (!g_vm_initialized) {
+        return NULL;
+    }
+    return &g_gcos_vm_instance;
+}

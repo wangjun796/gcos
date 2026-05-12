@@ -1197,6 +1197,15 @@ GCOSResult gcos_security_setup_app_isolation(GCOSVM *vm, u8 app_index);
  */
 void gcos_security_dump_authorization_table(const GCOSVM *vm);
 
+/**
+ * @brief Get global VM instance pointer
+ * 
+ * Used by JCShell server and other modules that need access to the VM.
+ * 
+ * @return Pointer to global VM instance, or NULL if not initialized
+ */
+GCOSVM* gcos_vm_get_instance(void);
+
 #ifdef __cplusplus
 }
 #endif
