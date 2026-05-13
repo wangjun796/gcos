@@ -55,9 +55,9 @@ try:
                 print(f"    ATR: {atr_data.hex().upper()}")
                 
                 if ts == 0x3B:
-                    print("    ✓ Valid ATR (TS=0x3B indicates direct convention)")
+                    print("    [OK] Valid ATR (TS=0x3B indicates direct convention)")
                 else:
-                    print(f"    ⚠ Unexpected TS value")
+                    print(f"    [WARN] Unexpected TS value")
         else:
             print("[3] No ATR data received")
     

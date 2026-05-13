@@ -119,6 +119,8 @@ static int process_client_connection(int client_sock, u16 port) {
         
         printf("[JCShell] Received header: type=%u, cmd=0x%02X, size=%u\n",
                type, cmd, data_size);
+        printf("[JCShell] Header bytes: %02X %02X %02X %02X\n",
+               header[0], header[1], header[2], header[3]);
         
         /* Step 2: Receive data payload */
         if (data_size > 0) {
