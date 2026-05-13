@@ -1,153 +1,235 @@
-# GCOS VM - 基于COS3规范的国产智能卡虚拟机
+# GCOS VM - 基于COS3规范的智能卡虚拟机
 
-## 📖 项目概述
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Standard](https://img.shields.io/badge/standard-GB%2FT%2044901.3-orange.svg)](docs/PROJECT_STATUS_REPORT.md)
+[![Status](https://img.shields.io/badge/status-active-green.svg)](docs/PROJECT_STATUS_REPORT.md)
 
-**GCOS VM** (GuoChao Operating System Virtual Machine) 是一个基于中华人民共和国国家标准 **GB/T 44901.3《卡及身份识别安全设备片上操作系统第3部分：支持面向过程应用后下载的基础层技术要求》** 实现的虚拟机系统。
+## 📖 简介
 
-### 🎯 设计目标
+**GCOS VM** (GuoChao Operating System Virtual Machine) 是一个严格遵循 **GB/T 44901.3** 国家标准的智能卡虚拟机实现。
 
-- ✅ **完全符合COS3规范** - 严格遵循国家标准要求
-- ✅ **栈式字节码执行器** - 弹栈-执行-压栈计算模型
-- ✅ **支持应用后下载** - SEF文件格式加载和安装
-- ✅ **多通道应用隔离** - 最多8个逻辑通道独立运行
-- ✅ **事务管理机制** - 原子性操作保证数据一致性
-- ✅ **运行时安全管理** - 应用隔离、接口授权、异常处理
-- ✅ **零动态内存分配** - 全局静态实例,适合嵌入式环境
-- ✅ **参考成熟架构** - 借鉴 wasm3/iwasm 的设计模式
+### ✨ 核心特性
 
----
-
-## 📚 文档导航
-
-### 核心文档
-
-- **[实现计划](docs/IMPLEMENTATION_PLAN.md)** ⭐ - 详细的模块设计、接口规范和开发路线图（743行）
-- **[COS3 vs WASM对比](docs/COS3_VS_WASM_COMPARISON.md)** ⭐⭐ - COS3规范与WebAssembly的核心差异分析（870行）
-- **[对比分析总结](docs/COMPARISON_SUMMARY.md)** - 对比分析工作的完成总结和关键洞察（379行）
-- **[开发指南](docs/DEVELOPER_GUIDE.md)** - 编码规范、测试指南和贡献流程（363行）
-- **[任务跟踪](docs/TASK_TRACKER.md)** - 详细的开发进度跟踪和里程碑（418行）
-- **[架构设计](ARCHITECTURE.md)** - 系统架构图和数据流图（399行）
-- **[项目概述](README_COS3_VM.md)** - 完整的项目介绍和快速开始（411行）
-
-### 快速链接
-
-| 我想... | 查看文档 |
-|---------|----------|
-| 了解项目整体情况 | [README_COS3_VM.md](README_COS3_VM.md) |
-| 查看详细实现计划 | [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
-| **理解COS3与WASM差异** | **[COS3_VS_WASM_COMPARISON.md](docs/COS3_VS_WASM_COMPARISON.md)** |
-| 开始编写代码 | [DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) |
-| 跟踪开发进度 | [TASK_TRACKER.md](docs/TASK_TRACKER.md) |
-| 理解系统架构 | [ARCHITECTURE.md](ARCHITECTURE.md) |
+- ✅ **零动态内存分配** - 所有内存静态预分配，适合嵌入式环境
+- ✅ **完整VM核心** - 指令集、执行引擎、内存管理
+- ✅ **JCShell兼容** - 与IBM JCShell工具完全兼容（端口9000/9900）
+- ✅ **多协议支持** - T=0、T=CL协议栈
+- ✅ **应用生命周期管理** - 安装、选择、删除
+- ✅ **事务机制** - 原子性操作保证数据一致性
+- ✅ **安全域隔离** - 接口授权和访问控制
+- ✅ **跨平台** - Win32、Linux、Keil Cortex-M、ARM GCC
 
 ---
 
-## 架构特点
+## 🚀 快速开始
 
-- **栈式虚拟机架构**：基于操作数栈执行字节码指令
-- **支持C语言子集编译**：将C代码编译为自定义字节码
-- **模块化设计**：支持应用模块和库模块的动态加载
-- **安全管理**：内置访问控制和事务管理机制
-- **持久化存储**：支持易失性和非易失性数据存储
+### 编译
 
-## 目录结构
+```bash
+# Windows
+cd gcos_vm
+.\build.bat
+
+# Linux
+cd gcos_vm
+./build.sh
+
+# 或使用CMake
+cmake -B build -S .
+cmake --build build --config Debug
+```
+
+### 运行
+
+```bash
+# 启动JCShell Server（默认模式）
+./build/Debug/gcos_demo.exe
+
+# 或TLP Server模式（JCRE兼容）
+./build/Debug/gcos_demo.exe -T
+```
+
+### 连接测试
+
+使用IBM JCShell连接到 `localhost:9000`：
+
+```
+/open tcp localhost 9000
+/powerup
+/send 00A4040008A000000003000000
+```
+
+---
+
+## 🏗️ 架构概览
+
+```
+┌──────────────────────┐
+│   Card Terminal      │  ← IBM JCShell / 其他工具
+└──────────┬───────────┘
+           │ Binary Protocol (Port 9000/9900)
+┌──────────▼───────────┐
+│   JCShell Server     │  ← gcos_jcshell.c (多线程)
+└──────────┬───────────┘
+           │ Direct Call
+┌──────────▼───────────┐
+│   APDU Processing    │  ← gcos_apdu.c
+└──────────┬───────────┘
+           │ Dispatch
+┌──────────▼───────────┐
+│   VM Core            │  ← Executor, Memory, Loader
+│   ├─ App Manager     │  ← 应用生命周期
+│   ├─ Security        │  ← 安全域和授权
+│   └─ Transaction     │  ← 事务管理
+└──────────┬───────────┘
+           │
+┌──────────▼───────────┐
+│ Transport & HAL      │  ← TCP Sockets
+└──────────────────────┘
+```
+
+---
+
+## 📁 项目结构
 
 ```
 gcos_vm/
-├── include/                 # 头文件
-│   ├── vm_core.h           # 虚拟机核心定义
-│   ├── vm_executor.h       # 执行器
-│   ├── vm_memory.h         # 内存管理
-│   ├── vm_instructions.h   # 指令集定义
-│   ├── vm_loader.h         # 文件加载器
-│   └── vm_types.h          # 类型定义
-├── src/                     # 源代码
-│   ├── vm_core.c
-│   ├── vm_executor.c
-│   ├── vm_memory.c
-│   ├── vm_instructions.c
-│   └── vm_loader.c
-├── tests/                   # 测试代码
-│   └── test_vm.c
-├── examples/                # 示例程序
-│   └── hello_app.c
-└── CMakeLists.txt          # 构建配置
+├── docs/                      # 核心文档
+│   ├── PROJECT_STATUS_REPORT.md  ⭐ 项目状态报告
+│   ├── CLEANUP_SUMMARY.md        代码清理总结
+│   ├── ARCHITECTURE_COMPARISON_GCOS_VS_CREF.md
+│   ├── CREF_ARCHITECTURE_ANALYSIS.md
+│   ├── DEVELOPER_GUIDE.md
+│   └── CROSS_PLATFORM_GUIDE.md
+│
+├── include/                   # 头文件 (10个)
+│   ├── gcos_vm.h              VM核心定义
+│   ├── gcos_apdu.h            APDU处理
+│   ├── gcos_instructions.h    指令集
+│   ├── gcos_transport.h       传输层
+│   ├── gcos_hal.h             HAL接口
+│   └── ...
+│
+├── src/                       # 源代码 (16个)
+│   ├── gcos_vm.c              VM核心
+│   ├── gcos_executor.c        执行引擎
+│   ├── gcos_memory.c          内存管理
+│   ├── gcos_instructions.c    指令集
+│   ├── gcos_loader.c          SEF加载器
+│   ├── gcos_app_manager.c     应用管理
+│   ├── gcos_security.c        安全管理
+│   ├── gcos_transaction.c     事务管理
+│   ├── gcos_apdu.c            APDU处理
+│   ├── gcos_tlp.c             TLP协议
+│   ├── gcos_t0_protocol.c     T=0协议
+│   ├── gcos_transport.c       传输层
+│   ├── gcos_hal_win32.c       HAL实现
+│   ├── gcos_jcshell.c         JCShell Server
+│   ├── gcos_tlp_server.c      TLP Server
+│   └── gcos_main.c            主程序
+│
+├── tests/                     # 单元测试 (5个)
+├── examples/                  # 示例程序
+└── platform/                  # 平台特定代码
 ```
 
-## 核心组件
+---
 
-### 1. 执行器 (Executor)
-- 字节码解释执行引擎
-- 栈帧管理
-- 异常处理
+## 📊 当前状态
 
-### 2. 运行时数据区
-- **执行器栈**：4字节栈单元，管理函数调用
-- **间接访问变量栈**：16字节栈单元，存储组合数据类型
-- **全局数据区**：存储模块全局数据和临时数据
-- **堆**：非易失性存储，支持持久化数据
-- **程序计数器**：跟踪当前执行指令
+### ✅ 已完成
 
-### 3. 指令集
-支持200+条指令，包括：
-- 算术运算：ADD, SUB, MUL, DIV等
-- 逻辑运算：AND, OR, XOR, SHL等
-- 控制流：BR, BEQZ, BNEZ, CALL等
-- 数据访问：LDT, STT, LDM, STM等
-- 类型转换：CVT系列指令
+- [x] VM核心和执行引擎
+- [x] 完整的指令集框架
+- [x] 内存管理（零动态分配）
+- [x] 传输层和HAL抽象
+- [x] JCShell Server（二进制协议）
+- [x] TLP224和T=0协议栈
+- [x] 应用管理器框架
+- [x] 安全管理器框架
+- [x] 事务管理器框架
+- [x] APDU处理框架（Echo占位符）
 
-### 4. 内存管理
-- 模块数据管理（全局、局部、只读、域数据）
-- 应用数据管理（临时静态、临时动态、跨域、持久性等）
-- 自动垃圾回收
+### ⚠️ 待实现
 
-## 编译和运行
+- [ ] SELECT命令 - 应用选择逻辑
+- [ ] LOAD命令 - 流式加载状态机
+- [ ] INSTALL命令 - 应用安装
+- [ ] DELETE命令 - 应用删除
+- [ ] GET STATUS命令 - 状态查询
+- [ ] MANAGE CHANNEL命令 - 通道管理
+- [ ] SEF文件解析和链接
+- [ ] 完整的密钥管理
 
-```bash
-mkdir build && cd build
-cmake ..
-make
-./tests/test_vm
-```
+详见 **[PROJECT_STATUS_REPORT.md](docs/PROJECT_STATUS_REPORT.md)**
 
-## 使用示例
+---
 
-```c
-#include "vm_core.h"
+## 📚 文档
 
-int main() {
-    VMContext *vm = vm_create();
-    
-    // 加载可执行文件
-    vm_load_file(vm, "app.sef");
-    
-    // 选择应用
-    vm_select_app(vm, app_aid);
-    
-    // 执行命令
-    vm_execute_command(vm, apdu_data);
-    
-    // 清理
-    vm_destroy(vm);
-    return 0;
-}
-```
+| 文档 | 说明 |
+|------|------|
+| **[PROJECT_STATUS_REPORT.md](docs/PROJECT_STATUS_REPORT.md)** | 📋 最新项目状态和开发计划 |
+| **[CLEANUP_SUMMARY.md](docs/CLEANUP_SUMMARY.md)** | 🧹 代码清理工作总结 |
+| **[ARCHITECTURE_COMPARISON_GCOS_VS_CREF.md](docs/ARCHITECTURE_COMPARISON_GCOS_VS_CREF.md)** | 🔍 与Cref的架构对比 |
+| **[CREF_ARCHITECTURE_ANALYSIS.md](docs/CREF_ARCHITECTURE_ANALYSIS.md)** | 📖 Cref架构详细分析 |
+| **[DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** | 👨‍💻 开发者指南和编码规范 |
+| **[CROSS_PLATFORM_GUIDE.md](docs/CROSS_PLATFORM_GUIDE.md)** | 🌍 跨平台编译指南 |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | 🏛️ 系统架构详细说明 |
 
-## 技术特性
+---
 
-- ✅ 完整的指令集实现
-- ✅ 栈式执行模型
-- ✅ 模块化应用支持
-- ✅ 事务管理机制
-- ✅ 异常处理机制
-- ✅ 多通道应用选择
-- ✅ 持久化数据存储
-- ✅ 安全的内存隔离
+## 🔧 技术栈
 
-## 标准符合性
+- **语言**: C99
+- **构建**: CMake 3.10+
+- **编译器**: MSVC / GCC / Clang / Keil ARMCC
+- **协议**: TLP224, T=0 (ISO 7816-3), T=CL (ISO 14443-4)
+- **网络**: TCP Sockets (Winsock/BSD Sockets)
 
-完全符合 GB/T 44901.3 标准要求：
-- 二进制文件格式（SEF/LINK/ASM）
-- 模块化和应用部署流程
-- 运行时数据管理规范
-- 安全管理和访问控制
+---
+
+## 🎯 下一步开发计划
+
+### Phase 1: 核心APDU命令（高优先级）
+1. SELECT命令实现
+2. LOAD命令实现（流式加载）
+3. INSTALL命令实现
+
+### Phase 2: 管理命令（中优先级）
+1. DELETE命令
+2. GET STATUS命令
+3. MANAGE CHANNEL命令
+
+### Phase 3: 高级功能（低优先级）
+1. 完善事务管理
+2. 完善安全管理
+3. SEF文件完整解析
+
+---
+
+## 📝 许可证
+
+本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 🤝 贡献
+
+欢迎提交Issue和Pull Request！
+
+在提交代码前，请阅读：
+- [DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) - 编码规范
+- [CROSS_PLATFORM_GUIDE.md](docs/CROSS_PLATFORM_GUIDE.md) - 跨平台注意事项
+
+---
+
+## 📞 联系
+
+如有问题或建议，请提交Issue。
+
+---
+
+**最后更新**: 2026-05-11  
+**版本**: 1.0.0  
+**状态**: ✅ 代码清理完成，准备进入Phase 1开发
