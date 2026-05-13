@@ -186,19 +186,54 @@ static int process_client_connection(int client_sock, u16 port) {
         }
         
         /* Step 4: Regular APDU command - forward to VM */
-        printf("[JCShell] Processing APDU command\n");
+        printf("[JCShell] Processing APDU command (%u bytes)\n", data_size);
         
-        /* TODO: Forward APDU to VM and get response */
-        /* For now, return a simple error response */
-        u8 sw_hi = 0x6D;
-        u8 sw_lo = 0x00;
+        /* Get VM instance */
+        extern GCOSVM* gcos_vm_get_instance(void);
+        GCOSVM* vm = gcos_vm_get_instance();
         
+        if (vm == NULL) {
+            printf("[JCShell] ERROR: VM not initialized\n");
+            /* Send error SW 0x6F00 */
+            u8 resp_header[4];
+            resp_header[0] = type;
+            resp_header[1] = 0;
+            resp_header[2] = 0;
+            resp_header[3] = 2;  /* SW is 2 bytes */
+            
+#ifdef GCOS_PLATFORM_WIN32
+            send(client_sock, (const char*)resp_header, 4, 0);
+#else
+            write(client_sock, resp_header, 4);
+#endif
+            u8 sw_error[2] = { 0x6F, 0x00 };
+#ifdef GCOS_PLATFORM_WIN32
+            send(client_sock, (const char*)sw_error, 2, 0);
+#else
+            write(client_sock, sw_error, 2);
+#endif
+            continue;
+        }
+        
+        /* Process APDU through VM */
+        u8 response_buffer[RESPONSE_BUFFER_SIZE];
+        memset(response_buffer, 0, RESPONSE_BUFFER_SIZE);  /* Clear buffer */
+        u16 response_length = RESPONSE_BUFFER_SIZE;
+        u16 sw = gcos_vm_process_apdu(vm, apdu_buffer, data_size,
+                                     response_buffer, &response_length);
+        
+        printf("[JCShell] VM returned SW=0x%04X, Response=%u bytes\n", 
+               sw, response_length);
+        
+        /* Build binary response: [type][cmd][size_hi][size_lo][data...][SW1][SW2] */
+        u16 total_data_len = response_length + 2;  /* data + SW */
         u8 resp_header[4];
         resp_header[0] = type;
         resp_header[1] = 0;
-        resp_header[2] = 0;
-        resp_header[3] = 2;  /* SW is 2 bytes */
+        resp_header[2] = (u8)(total_data_len >> 8);
+        resp_header[3] = (u8)(total_data_len & 0xFF);
         
+        /* Send header */
 #ifdef GCOS_PLATFORM_WIN32
         if (send(client_sock, (const char*)resp_header, 4, 0) != 4) {
 #else
@@ -208,17 +243,30 @@ static int process_client_connection(int client_sock, u16 port) {
             break;
         }
         
-        u8 sw_response[2] = { sw_hi, sw_lo };
+        /* Send response data */
+        if (response_length > 0) {
 #ifdef GCOS_PLATFORM_WIN32
-        if (send(client_sock, (const char*)sw_response, 2, 0) != 2) {
+            if (send(client_sock, (const char*)response_buffer, response_length, 0) != (int)response_length) {
 #else
-        if (write(client_sock, sw_response, 2) != 2) {
+            if (write(client_sock, response_buffer, response_length) != (int)response_length) {
+#endif
+                printf("[JCShell] ERROR: Failed to send response data\n");
+                break;
+            }
+        }
+        
+        /* Send SW */
+        u8 sw_bytes[2] = { (u8)(sw >> 8), (u8)(sw & 0xFF) };
+#ifdef GCOS_PLATFORM_WIN32
+        if (send(client_sock, (const char*)sw_bytes, 2, 0) != 2) {
+#else
+        if (write(client_sock, sw_bytes, 2) != 2) {
 #endif
             printf("[JCShell] ERROR: Failed to send SW\n");
             break;
         }
         
-        printf("[JCShell] Sent SW response: 0x%02X%02X\n", sw_hi, sw_lo);
+        printf("[JCShell] Response sent successfully (SW=0x%04X)\n", sw);
     }
     
 close_connection:
