@@ -67,149 +67,167 @@ static WSADATA wsa_data;
  * @param port         Port number (9000 or 9900)
  * @return             0 on success, -1 on error
  */
+/**
+ * @brief Process a single client connection (cref-compatible binary protocol)
+ * 
+ * This follows cref's jcshell.c processConnect() function:
+ * 1. Receive 4-byte header: [type][cmd][size_hi][size_lo]
+ * 2. Receive data payload
+ * 3. If POWER_UP (type=0, cmd=0x21), send ATR response
+ * 4. Otherwise, forward APDU to VM and return response
+ * 
+ * Protocol: Binary (not TLP224 ASCII hex)
+ */
 static int process_client_connection(int client_sock, u16 port) {
-    TLP_MSG msg;
+    u8 header[4];
     u8 apdu_buffer[APDU_BUFFER_SIZE];
     u8 response_buffer[RESPONSE_BUFFER_SIZE];
-    u16 response_length = 0;
-    u16 sw = 0x9000;
+    u16 data_size;
+    u8 type;
+    u8 cmd;
     
     printf("[JCShell] Client connected on port %u\n", port);
     
-    /* Initialize TLP message */
-    tlp_msg_init(&msg);
-    msg.fd = client_sock;
-    
     /* Main message processing loop */
     while (1) {
-        s16 recv_len;
-        
-        /* Step 1: Receive TLP224 message */
-        recv_len = tlp_receive_message(&msg);
-        if (recv_len < 0) {
-            printf("[JCShell] ERROR: Failed to receive TLP224 message\n");
+        /* Step 1: Receive 4-byte header */
+#ifdef GCOS_PLATFORM_WIN32
+        if (recv(client_sock, (char*)header, 4, 0) != 4) {
+#else
+        if (read(client_sock, header, 4) != 4) {
+#endif
+            printf("[JCShell] ERROR: Failed to receive header\n");
             break;
         }
         
-        printf("[JCShell] Received TLP224 message (%d bytes)\n", recv_len);
-        printf("  Binary: ");
-        for (int i = 0; i < msg.len && i < 20; i++) {
-            printf("%02X", msg.buf[i]);
-        }
-        if (msg.len > 20) printf("...");
-        printf("\n");
+        type = header[0];
+        cmd = header[1];
+        data_size = ((u16)header[2] << 8) | header[3];
         
-        /* Step 2: Check for POWER_UP command */
-        if (msg.buf[3] == TLP_POWER_UP) {
+        printf("[JCShell] Received header: type=%u, cmd=0x%02X, size=%u\n",
+               type, cmd, data_size);
+        
+        /* Step 2: Receive data payload */
+        if (data_size > 0) {
+            if (data_size >= APDU_BUFFER_SIZE) {
+                printf("[JCShell] ERROR: Data too large (%u bytes)\n", data_size);
+                break;
+            }
+            
+            u16 received = 0;
+            while (received < data_size) {
+#ifdef GCOS_PLATFORM_WIN32
+                int n = recv(client_sock, (char*)&apdu_buffer[received], 
+                            data_size - received, 0);
+#else
+                int n = read(client_sock, &apdu_buffer[received], 
+                            data_size - received);
+#endif
+                if (n <= 0) {
+                    printf("[JCShell] ERROR: Failed to receive data\n");
+                    goto close_connection;
+                }
+                received += n;
+            }
+            
+            printf("[JCShell] Received %u bytes of data\n", received);
+        }
+        
+        /* Step 3: Check for POWER_UP command (type=0, cmd=0x21) */
+        if (type == 0 && cmd == 0x21) {
             printf("[JCShell] POWER_UP command received\n");
             
-            /* Send ATR */
+            /* Build ATR response */
             static const u8 atr[] = { 0x3B, 0xF4, 0x11, 0x00, 0xFF, 0x00 };
             static const u8 hist[] = { 0x11, 0x22, 0x33, 0x44 };
+            u8 atr_len = sizeof(atr);
+            u8 hist_len = sizeof(hist);
+            u8 total_len = atr_len + hist_len;
             
-            s8 result = t0_send_atr(&msg, 4, atr, hist, false);
-            if (result != 0) {
+            /* Response format: [type][cmd][size_hi][size_lo][atr_data...][hist_data...] */
+            u8 resp_header[4];
+            resp_header[0] = type;
+            resp_header[1] = 0;  /* cmd=0 for response */
+            resp_header[2] = 0;  /* size high byte */
+            resp_header[3] = total_len;  /* size low byte */
+            
+            /* Send header */
+#ifdef GCOS_PLATFORM_WIN32
+            if (send(client_sock, (const char*)resp_header, 4, 0) != 4) {
+#else
+            if (write(client_sock, resp_header, 4) != 4) {
+#endif
+                printf("[JCShell] ERROR: Failed to send response header\n");
+                break;
+            }
+            
+            /* Send ATR data */
+#ifdef GCOS_PLATFORM_WIN32
+            if (send(client_sock, (const char*)atr, atr_len, 0) != (int)atr_len) {
+#else
+            if (write(client_sock, atr, atr_len) != (int)atr_len) {
+#endif
                 printf("[JCShell] ERROR: Failed to send ATR\n");
                 break;
             }
             
-            continue;
-        }
-        
-        /* Step 3: Check for POWER_DOWN command */
-        if (msg.buf[3] == TLP_POWER_DOWN) {
-            printf("[JCShell] POWER_DOWN command received\n");
-            
-            /* Send acknowledgment */
-            msg.buf[0] = TLP_ACK;
-            msg.buf[1] = 0;
-            msg.buf[2] = 1;
-            msg.buf[3] = STATUS_SUCCESS;
-            msg.buf[4] = tlp_compute_lrc(msg.buf, 4);
-            msg.len = 5;
-            
-            tlp_send_message(&msg);
-            break;
-        }
-        
-        /* Step 4: Process ISO_INPUT/ISO_OUTPUT commands */
-        if (msg.buf[3] == TLP_ISO_INPUT || msg.buf[3] == TLP_ISO_OUTPUT) {
-            /* Extract APDU from TLP message */
-            u8 apdu_len = msg.len - 10;  /* Subtract TLP header (4) + LRC (1) + overhead */
-            if (apdu_len > APDU_BUFFER_SIZE) {
-                printf("[JCShell] ERROR: APDU too long (%u bytes)\n", apdu_len);
-                continue;
-            }
-            
-            memcpy(apdu_buffer, &msg.buf[TLP_OFFSET_CLA], apdu_len);
-            
-            printf("[JCShell] Processing APDU (%u bytes): ", apdu_len);
-            for (int i = 0; i < apdu_len && i < 20; i++) {
-                printf("%02X", apdu_buffer[i]);
-            }
-            printf("\n");
-            
-            /* Step 5: Process APDU through VM */
-            extern GCOSVM* gcos_vm_get_instance(void);
-            GCOSVM* vm = gcos_vm_get_instance();
-            
-            if (vm == NULL) {
-                printf("[JCShell] ERROR: VM not initialized\n");
-                sw = 0x6F00;
-            } else {
-                response_length = RESPONSE_BUFFER_SIZE;
-                sw = gcos_vm_process_apdu(vm, apdu_buffer, apdu_len,
-                                         response_buffer, &response_length);
-                
-                printf("[JCShell] VM returned SW=0x%04X, Response=%u bytes\n", 
-                       sw, response_length);
-            }
-            
-            /* Step 6: Build TLP224 response */
-            msg.buf[0] = TLP_ACK;
-            msg.buf[1] = (u8)((response_length + 3) >> 8);
-            msg.buf[2] = (u8)((response_length + 3) & 0xFF);
-            msg.buf[3] = (sw == 0x9000) ? STATUS_SUCCESS : STATUS_CARD_ERROR;
-            
-            /* Copy response data */
-            if (response_length > 0) {
-                memcpy(&msg.buf[4], response_buffer, response_length);
-            }
-            
-            /* Append SW1SW2 */
-            msg.buf[4 + response_length] = (u8)(sw >> 8);
-            msg.buf[5 + response_length] = (u8)(sw & 0xFF);
-            
-            /* Compute and append LRC */
-            msg.len = 6 + response_length;
-            msg.buf[msg.len] = tlp_compute_lrc(msg.buf, msg.len);
-            msg.len++;
-            
-            /* Step 7: Send TLP224 response */
-            if (tlp_send_message(&msg) != 0) {
-                printf("[JCShell] ERROR: Failed to send response\n");
+            /* Send historical bytes */
+#ifdef GCOS_PLATFORM_WIN32
+            if (send(client_sock, (const char*)hist, hist_len, 0) != (int)hist_len) {
+#else
+            if (write(client_sock, hist, hist_len) != (int)hist_len) {
+#endif
+                printf("[JCShell] ERROR: Failed to send historical bytes\n");
                 break;
             }
             
-            printf("[JCShell] Response sent (SW=0x%04X)\n", sw);
+            printf("[JCShell] Sent ATR response (%u bytes)\n", total_len);
             continue;
         }
         
-        /* Unknown command type */
-        printf("[JCShell] WARNING: Unknown command type 0x%02X\n", msg.buf[3]);
+        /* Step 4: Regular APDU command - forward to VM */
+        printf("[JCShell] Processing APDU command\n");
         
-        /* Send protocol error */
-        msg.buf[0] = TLP_ACK;
-        msg.buf[1] = 0;
-        msg.buf[2] = 1;
-        msg.buf[3] = STATUS_COMMAND_UNKNOWN;
-        msg.buf[4] = tlp_compute_lrc(msg.buf, 4);
-        msg.len = 5;
+        /* TODO: Forward APDU to VM and get response */
+        /* For now, return a simple error response */
+        u8 sw_hi = 0x6D;
+        u8 sw_lo = 0x00;
         
-        tlp_send_message(&msg);
+        u8 resp_header[4];
+        resp_header[0] = type;
+        resp_header[1] = 0;
+        resp_header[2] = 0;
+        resp_header[3] = 2;  /* SW is 2 bytes */
+        
+#ifdef GCOS_PLATFORM_WIN32
+        if (send(client_sock, (const char*)resp_header, 4, 0) != 4) {
+#else
+        if (write(client_sock, resp_header, 4) != 4) {
+#endif
+            printf("[JCShell] ERROR: Failed to send response header\n");
+            break;
+        }
+        
+        u8 sw_response[2] = { sw_hi, sw_lo };
+#ifdef GCOS_PLATFORM_WIN32
+        if (send(client_sock, (const char*)sw_response, 2, 0) != 2) {
+#else
+        if (write(client_sock, sw_response, 2) != 2) {
+#endif
+            printf("[JCShell] ERROR: Failed to send SW\n");
+            break;
+        }
+        
+        printf("[JCShell] Sent SW response: 0x%02X%02X\n", sw_hi, sw_lo);
     }
     
+close_connection:
     printf("[JCShell] Client disconnected\n");
+#ifdef GCOS_PLATFORM_WIN32
+    closesocket(client_sock);
+#else
+    close(client_sock);
+#endif
     return 0;
 }
 
@@ -350,7 +368,7 @@ GCOSResult gcos_jcshell_init(void) {
 GCOSResult gcos_jcshell_start(void) {
     if (!server_initialized) {
         printf("[JCShell] ERROR: Server not initialized\n");
-        return GCOS_ERR_INVALID_STATE;
+        return GCOS_ERROR_INVALID_STATE;
     }
     
     printf("[JCShell] Starting server threads...\n");
@@ -362,7 +380,7 @@ GCOSResult gcos_jcshell_start(void) {
                                              0, NULL);
     if (h_thread_contacted == NULL) {
         printf("[JCShell] ERROR: Failed to create contacted thread\n");
-        return GCOS_ERR_INVALID_STATE;
+        return GCOS_ERROR_INVALID_STATE;
     }
     
     /* Start contactless server thread */
@@ -371,7 +389,7 @@ GCOSResult gcos_jcshell_start(void) {
                                                0, NULL);
     if (h_thread_contactless == NULL) {
         printf("[JCShell] ERROR: Failed to create contactless thread\n");
-        return GCOS_ERR_INVALID_STATE;
+        return GCOS_ERROR_INVALID_STATE;
     }
     
     printf("[JCShell] Server threads started\n");

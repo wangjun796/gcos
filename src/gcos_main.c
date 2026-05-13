@@ -15,9 +15,16 @@
 #include "gcos_transport.h"
 #include "gcos_tlp.h"
 #include "gcos_t0_protocol.h"
-#include "gcos_jcshell.h"  /* JCShell server (NEW) */
+#include "gcos_jcshell.h"      /* JCShell server (TLP224, ports 9000/9900) */
+#include "gcos_tlp_server.h"   /* TLP Server for JCRE (port 9025, NEW) */
 #include <stdio.h>
 #include <string.h>
+
+#ifdef GCOS_PLATFORM_WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 /* ============================================================================
  * Configuration Constants
@@ -146,21 +153,25 @@ static int process_single_apdu(void) {
 static void print_usage(const char *program_name) {
     printf("Usage: %s [options]\n", program_name);
     printf("\nOptions:\n");
-    printf("  -s, --stdio       Use STDIO mode (interactive, default)\n");
-    printf("  -t, --tcp [PORT]  Use TCP server mode (default port: %u)\n", DEFAULT_TCP_PORT);
-    printf("  -h, --help        Show this help message\n");
+    printf("  -t, --tcp [PORT]     Use TCP server mode (default port: %u)\n", DEFAULT_TCP_PORT);
+    printf("  -j, --jcshell        Use JCShell server (TLP224 protocol, ports 9000/9900)\n");
+    printf("  -T, --tlp            Use TLP Server for JCRE (port 9025, cref-compatible)\n");
+    printf("  -h, --help           Show this help message\n");
     printf("\nExamples:\n");
-    printf("  %s                  # Interactive mode\n", program_name);
-    printf("  %s -s               # Interactive mode\n", program_name);
     printf("  %s -t               # TCP server on port %u\n", program_name, DEFAULT_TCP_PORT);
     printf("  %s -t 9028          # TCP server on port 9028\n", program_name);
-    printf("\nSTDIO Mode:\n");
-    printf("  Enter APDU as hex string, e.g.:\n");
-    printf("  00A4040008A000000003000000\n");
-    printf("  Type 'quit' or 'exit' to terminate\n");
+    printf("  %s -j               # JCShell server (TLP224)\n", program_name);
+    printf("  %s -T               # TLP Server (JCRE mode, port 9025)\n", program_name);
     printf("\nTCP Mode:\n");
     printf("  Connect using: nc localhost <PORT>\n");
     printf("  Or use a smart card terminal tool\n");
+    printf("\nJCShell Mode:\n");
+    printf("  Uses TLP224 protocol (ASCII hex encoding)\n");
+    printf("  Compatible with cref\n");
+    printf("\nTLP Server Mode (JCRE):\n");
+    printf("  Listens on port 9025\n");
+    printf("  Receives APDU from JCShell via TLP protocol\n");
+    printf("  Architecture: JCShell (9000/9900) <-> TLP <-> GCOS (9025)\n");
     printf("\n");
 }
 
@@ -189,18 +200,20 @@ static void print_usage(const char *program_name) {
  * @return Exit code (should never return in real card)
  */
 int main(int argc, char *argv[]) {
-    TransportMode mode = TRANSPORT_MODE_STDIO;
+    TransportMode mode = TRANSPORT_MODE_JCSHELL;  /* Default to JCShell mode (ports 9000/9900) */
     u16 tcp_port = DEFAULT_TCP_PORT;
     
     /* Parse command-line arguments */
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--stdio") == 0) {
-            mode = TRANSPORT_MODE_STDIO;
-        } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--tcp") == 0) {
+        if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--tcp") == 0) {
             mode = TRANSPORT_MODE_TCP_SERVER;
             if (i + 1 < argc) {
                 tcp_port = (u16)atoi(argv[++i]);
             }
+        } else if (strcmp(argv[i], "-j") == 0 || strcmp(argv[i], "--jcshell") == 0) {
+            mode = TRANSPORT_MODE_JCSHELL;
+        } else if (strcmp(argv[i], "-T") == 0 || strcmp(argv[i], "--tlp") == 0) {
+            mode = TRANSPORT_MODE_TLP_SERVER;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;
@@ -223,46 +236,91 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    /* Step 2: Initialize transport layer */
-    printf("\n[Transport] Initializing %s mode...\n", 
-           mode == TRANSPORT_MODE_STDIO ? "STDIO" : "TCP Server");
+    /* Step 2: Initialize transport layer based on mode */
+    switch (mode) {
+        case TRANSPORT_MODE_TCP_SERVER:
+            printf("\n[Transport] Initializing TCP Server mode on port %u...\n", tcp_port);
+            result = gcos_transport_init(mode, tcp_port);
+            break;
+            
+        case TRANSPORT_MODE_JCSHELL:
+            printf("\n[JCShell] Initializing JCShell server (TLP224 protocol)...\n");
+            result = gcos_jcshell_init();
+            if (result == GCOS_SUCCESS) {
+                result = gcos_jcshell_start();
+                if (result == GCOS_SUCCESS) {
+                    printf("[JCShell] Server started on ports 9000 (contacted) and 9900 (contactless)\n");
+                    printf("[JCShell] NOTE: JCShell handles all client connections and ATR sending\n");
+                    printf("[JCShell] NOTE: Main thread will NOT process APDUs in this mode\n");
+                }
+            }
+            break;
+            
+        case TRANSPORT_MODE_TLP_SERVER:
+            printf("\n[TLP_Server] Initializing TLP Server for JCRE (port 9025)...\n");
+            result = gcos_tlp_server_init(&vm_instance);
+            if (result == GCOS_SUCCESS) {
+                printf("[TLP_Server] Server will listen on port 9025\n");
+                printf("[TLP_Server] Protocol: cref-compatible TLP handshake + APDU forwarding\n");
+                printf("[TLP_Server] Architecture: JCShell (9000/9900) <-> TLP <-> GCOS (9025)\n");
+            }
+            break;
+            
+        default:
+            printf("\n[Transport] ERROR: Unsupported transport mode\n");
+            gcos_vm_destroy(&vm_instance);
+            return 1;
+    }
     
-    result = gcos_transport_init(mode, tcp_port);
-    if (result != GCOS_SUCCESS) {
+    if (result != GCOS_SUCCESS && mode != TRANSPORT_MODE_JCSHELL && mode != TRANSPORT_MODE_TLP_SERVER) {
         printf("[GCOS] FATAL: Cannot initialize transport, exiting\n");
         gcos_vm_destroy(&vm_instance);
         return 1;
     }
     
-    /* Step 2b: Initialize JCShell server (cref-compatible) */
-    printf("\n[JCShell] Initializing JCShell server...\n");
-    result = gcos_jcshell_init();
-    if (result != GCOS_SUCCESS) {
-        printf("[JCShell] WARNING: Failed to initialize JCShell server\n");
-    } else {
-        result = gcos_jcshell_start();
-        if (result != GCOS_SUCCESS) {
-            printf("[JCShell] WARNING: Failed to start JCShell server\n");
-        } else {
-            printf("[JCShell] Server started on ports 9000 (contacted) and 9900 (contactless)\n");
-        }
+    /* Step 3: Initialize TLP and T=0 protocol layers (only for certain modes) */
+    if (mode == TRANSPORT_MODE_JCSHELL || mode == TRANSPORT_MODE_TCP_SERVER) {
+        printf("\n[T=0] Initializing TLP and T=0 protocol layers...\n");
+        t0_protocol_init(&g_tlp_msg);
     }
-    
-    /* Step 3: Initialize TLP and T=0 protocol layers */
-    printf("\n[T=0] Initializing TLP and T=0 protocol layers...\n");
-    t0_protocol_init(&g_tlp_msg);
     
     printf("\n[GCOS] Entering main processing loop...\n");
     printf("[GCOS] Waiting for APDU commands...\n\n");
     
-    /* Step 3: Main processing loop */
+    /* Step 4: Main processing loop based on mode */
     int continue_processing = 1;
     int apdu_count = 0;
     
-    while (continue_processing) {
-        apdu_count++;
-        
-        continue_processing = process_single_apdu();
+    switch (mode) {
+        case TRANSPORT_MODE_TCP_SERVER:
+            /* Process APDUs in main thread */
+            while (continue_processing) {
+                apdu_count++;
+                continue_processing = process_single_apdu();
+            }
+            break;
+            
+        case TRANSPORT_MODE_JCSHELL:
+            /* JCShell threads handle all connections, main thread just keeps alive */
+            while (continue_processing) {
+#ifdef GCOS_PLATFORM_WIN32
+                Sleep(1000);  /* Sleep 1 second */
+#else
+                sleep(1);
+#endif
+                /* Check if we should exit (e.g., via signal handler) */
+            }
+            break;
+            
+        case TRANSPORT_MODE_TLP_SERVER:
+            /* TLP Server is single-threaded (cref-compatible), call start function */
+            printf("\n[TLP_Server] Entering TLP server main loop (blocking)...\n");
+            gcos_tlp_server_start();
+            break;
+            
+        default:
+            printf("[GCOS] ERROR: Unsupported mode in main loop\n");
+            break;
     }
     
     /* Step 4: Cleanup */

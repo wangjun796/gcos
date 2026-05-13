@@ -11,9 +11,10 @@
  * @brief Transport mode for APDU communication
  */
 typedef enum {
-    TRANSPORT_MODE_STDIO = 0,       /**< Standard input/output (interactive) */
-    TRANSPORT_MODE_TCP_SERVER = 1,  /**< TCP server (accept client connections) */
-    TRANSPORT_MODE_SERIAL = 2       /**< Serial port (for real card hardware) */
+    TRANSPORT_MODE_TCP_SERVER = 0,      /**< TCP server (accept client connections) */
+    TRANSPORT_MODE_SERIAL = 1,          /**< Serial port (for real card hardware) */
+    TRANSPORT_MODE_JCSHELL = 2,         /**< JCShell server (TLP224 protocol, ports 9000/9900) */
+    TRANSPORT_MODE_TLP_SERVER = 3       /**< TLP Server for JCRE (port 9025, cref-compatible) */
 } TransportMode;
 
 /* ============================================================================

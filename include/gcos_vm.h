@@ -82,33 +82,33 @@ typedef double      f64;
 
 /* Section Identifiers (COS3 Specification Table 18) */
 #define SECTION_ID_FIRST                0x01    /* First section (required) */
-#define SECTION_ID_IMPORT               0x02    /* 导入段 (可选) */
-#define SECTION_ID_FUNCTION             0x03    /* 函数段 (必选) */
-#define SECTION_ID_APP                  0x04    /* 应用段 (可选) */
-#define SECTION_ID_GLOBAL               0x05    /* 全局段 (必选) */
-#define SECTION_ID_EXPORT               0x06    /* 导出段 (可选) */
-#define SECTION_ID_ELEMENT              0x07    /* 元素段 (可选) */
-#define SECTION_ID_DATA                 0x08    /* 数据段 (可选) */
-#define SECTION_ID_CODE                 0x09    /* 代码段 (必选) */
-#define SECTION_ID_CUSTOM_START         0x0A    /* 自定义段起始 */
-#define SECTION_ID_CUSTOM_END           0x0E    /* 自定义段结束 */
-#define SECTION_ID_CUSTOM               0x0F    /* 自定义段 */
+#define SECTION_ID_IMPORT               0x02    /* Import section (optional) */
+#define SECTION_ID_FUNCTION             0x03    /* Function section (required) */
+#define SECTION_ID_APP                  0x04    /* Application section (optional) */
+#define SECTION_ID_GLOBAL               0x05    /* Global section (required) */
+#define SECTION_ID_EXPORT               0x06    /* Export section (optional) */
+#define SECTION_ID_ELEMENT              0x07    /* Element section (optional) */
+#define SECTION_ID_DATA                 0x08    /* Data section (optional) */
+#define SECTION_ID_CODE                 0x09    /* Code section (required) */
+#define SECTION_ID_CUSTOM_START         0x0A    /* Custom section start */
+#define SECTION_ID_CUSTOM_END           0x0E    /* Custom section end */
+#define SECTION_ID_CUSTOM               0x0F    /* Custom section */
 
-/* 系统限制 (COS3规范) */
-#define MAX_MODULES                     32      /* 最大模块数 */
-#define MAX_APPS_PER_MODULE             16      /* 每模块最大应用数 */
+/* System limits (COS3 specification) */
+#define MAX_MODULES                     32      /* Maximum number of modules */
+#define MAX_APPS_PER_MODULE             16      /* Maximum applications per module */
 #define MAX_FUNCTIONS                   256     /* Maximum functions */
 #define MAX_CHANNELS                    8       /* Maximum logical channels (COS3 spec) */
 #define MAX_IMPORT_MODULES              31      /* Maximum import modules (Table 19) */
 #define AID_MAX_LENGTH                  16      /* Maximum AID length */
 #define GCOS_MAX_FRAME_DEPTH            64      /* Maximum call stack depth */
 
-/* 操作码范围 (COS3规范表41) */
-#define OPCODE_SINGLE_BYTE_MIN          0x00    /* 单字节操作码最小值 */
-#define OPCODE_SINGLE_BYTE_MAX          0xFB    /* 单字节操作码最大值 */
-#define OPCODE_DOUBLE_BYTE_MIN          0xFC    /* 双字节操作码最小值 */
-#define OPCODE_DOUBLE_BYTE_MAX          0xFE    /* 双字节操作码最大值 */
-#define OPCODE_RESERVED                 0xFF    /* 保留 */
+/* Opcode ranges (COS3 specification Table 41) */
+#define OPCODE_SINGLE_BYTE_MIN          0x00    /* Single-byte opcode minimum */
+#define OPCODE_SINGLE_BYTE_MAX          0xFB    /* Single-byte opcode maximum */
+#define OPCODE_DOUBLE_BYTE_MIN          0xFC    /* Double-byte opcode minimum */
+#define OPCODE_DOUBLE_BYTE_MAX          0xFE    /* Double-byte opcode maximum */
+#define OPCODE_RESERVED                 0xFF    /* Reserved */
 
 /* ============================================================================
  * 枚举类型

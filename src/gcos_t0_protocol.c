@@ -226,8 +226,17 @@ s8 t0_send_atr(TLP_MSG *msg, u8 hist_len, const u8 *atr, const u8 *hist, bool ne
     msg->buf[total_len] = tlp_compute_lrc(msg->buf, total_len);
     msg->len = total_len + 1;
     
-    /* Send ATR message */
-    gcos_transport_send_response(msg->buf, msg->len, 0x9000);
+    /* Send ATR message via TLP (uses socket directly if msg->fd is valid) */
+    if (msg->fd >= 0) {
+        /* Direct socket mode (JCShell) */
+        if (tlp_send_message(msg) != 0) {
+            printf("[T=0] ERROR: Failed to send ATR via TLP\n");
+            return -1;
+        }
+    } else {
+        /* Transport layer mode (TCP Server) */
+        gcos_transport_send_response(msg->buf, msg->len, 0x9000);
+    }
     
     /* Update state */
     current_state = T0_STATE_HEADER_RECEIVED;

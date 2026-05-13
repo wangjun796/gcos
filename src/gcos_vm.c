@@ -391,61 +391,61 @@ GCOSResult gcos_vm_stack_push(GCOSVM *vm, u32 value) {
 }
 
 /**
- * @brief 从堆分配内存（返回偏移地址）
- * @param vm VM实例
- * @param size 分配大小
- * @return 偏移地址，0表示失败
- * @note COS3规范：堆是非易失性的，需要集成eflash库
+ * @brief Allocate memory from heap (returns offset address)
+ * @param vm VM instance
+ * @param size Allocation size
+ * @return Offset address, 0 indicates failure
+ * @note COS3 specification: Heap is non-volatile, requires eflash library integration
  */
 u32 gcos_vm_heap_alloc(GCOSVM *vm, u32 size) {
     if (vm == NULL || size == 0) {
         return 0;
     }
     
-    /* 对齐到4字节边界 */
+    /* Align to 4-byte boundary */
     u32 aligned_size = (size + 3) & ~3;
     
-    /* 检查是否有足够空间 */
+    /* Check if there is enough space */
     if (vm->runtime.heap_used + aligned_size > GCOS_HEAP_SIZE) {
         GCOS_PRINTF("[GCOS VM] Heap allocation failed: insufficient space\n");
         return 0;
     }
     
-    /* 分配并返回偏移地址 */
+    /* Allocate and return offset address */
     u32 addr = vm->runtime.heap_used;
     vm->runtime.heap_used += aligned_size;
     
-    /* 清零分配的内存 */
+    /* Clear allocated memory */
     memset(&vm->runtime.heap[addr], 0, aligned_size);
     
     return addr;
 }
 
 /**
- * @brief 释放堆内存（简化版，实际应使用标记清除）
- * @param vm VM实例
- * @param addr 偏移地址
- * @return GCOSResult 成功，其他值失败
- * @note TODO: 实现完整的堆管理器
+ * @brief Free heap memory (simplified version, should use mark-sweep in production)
+ * @param vm VM instance
+ * @param addr Offset address
+ * @return GCOSResult Success, other values indicate failure
+ * @note TODO: Implement complete heap manager
  */
 GCOSResult gcos_vm_heap_free(GCOSVM *vm, u32 addr) {
     if (vm == NULL) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* 简化实现：仅标记为可用 */
-    /* TODO: 实现完整的空闲链表或位图管理 */
+    /* Simplified implementation: only mark as available */
+    /* TODO: Implement complete free list or bitmap management */
     
     return GCOS_OK;
 }
 
 /* ============================================================================
- * 调试辅助函数
+ * Debug Helper Functions
  * ============================================================================ */
 
 /**
- * @brief 打印调用栈
- * @param vm VM实例
+ * @brief Print call stack
+ * @param vm VM instance
  */
 void gcos_vm_print_call_stack(const GCOSVM *vm) {
     if (vm == NULL) {
@@ -465,9 +465,9 @@ void gcos_vm_print_call_stack(const GCOSVM *vm) {
 }
 
 /**
- * @brief 验证VM状态一致性
- * @param vm VM实例
- * @return true 一致，false 不一致
+ * @brief Validate VM state consistency
+ * @param vm VM instance
+ * @return true if consistent, false if inconsistent
  */
 bool gcos_vm_validate(const GCOSVM *vm) {
     if (vm == NULL) {
@@ -476,37 +476,37 @@ bool gcos_vm_validate(const GCOSVM *vm) {
     
     bool valid = true;
     
-    /* 检查栈指针范围 */
+    /* Check stack pointer range */
     if (vm->runtime.stack_pointer > GCOS_EXECUTOR_STACK_SIZE) {
         GCOS_PRINTF("[GCOS VM] Validation Error: Stack pointer out of range\n");
         valid = false;
     }
     
-    /* 检查间接栈指针范围 */
+    /* Check indirect stack pointer range */
     if (vm->runtime.indirect_stack_pointer > GCOS_INDIRECT_STACK_SIZE) {
         GCOS_PRINTF("[GCOS VM] Validation Error: Indirect stack pointer out of range\n");
         valid = false;
     }
     
-    /* 检查全局数据区使用量 */
+    /* Check global data area usage */
     if (vm->runtime.global_data_used > GCOS_GLOBAL_DATA_SIZE) {
         GCOS_PRINTF("[GCOS VM] Validation Error: Global data overflow\n");
         valid = false;
     }
     
-    /* 检查堆使用量 */
+    /* Check heap usage */
     if (vm->runtime.heap_used > GCOS_HEAP_SIZE) {
         printf("[GCOS VM] Validation Error: Heap overflow\n");
         valid = false;
     }
     
-    /* 检查模块数量 */
+    /* Check module count */
     if (vm->module_count > GCOS_MAX_MODULES) {
         printf("[GCOS VM] Validation Error: Too many modules\n");
         valid = false;
     }
     
-    /* 检查应用数量 */
+    /* Check application count */
     if (vm->app_count > GCOS_MAX_APPS) {
         printf("[GCOS VM] Validation Error: Too many apps\n");
         valid = false;
@@ -516,7 +516,7 @@ bool gcos_vm_validate(const GCOSVM *vm) {
 }
 
 /* ============================================================================
- * 版本信息
+ * Version Information
  * ============================================================================ */
 
 const char* gcos_vm_get_version(void) {

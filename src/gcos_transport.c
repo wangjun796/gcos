@@ -30,7 +30,7 @@
  * Internal State
  * ============================================================================ */
 
-static TransportMode current_mode = TRANSPORT_MODE_STDIO;
+static TransportMode current_mode = TRANSPORT_MODE_TCP_SERVER;
 static int socket_fd = -1;
 static bool transport_initialized = false;
 
@@ -97,48 +97,6 @@ static void bytes_to_hex(const u8 *data, u16 len, char *hex_str, u16 max_len) {
         pos += 2;
     }
     hex_str[pos] = '\0';
-}
-
-/* ============================================================================
- * STDIO Transport Implementation
- * ============================================================================ */
-
-static u16 stdio_receive_apdu(u8 *buffer, u16 max_len) {
-    char line[512];
-    
-    printf("APDU> ");
-    fflush(stdout);
-    
-    if (fgets(line, sizeof(line), stdin) == NULL) {
-        return 0; /* EOF */
-    }
-    
-    /* Check for quit command */
-    if (strcmp(line, "quit\n") == 0 || strcmp(line, "exit\n") == 0 || 
-        strcmp(line, "q\n") == 0) {
-        return 0;
-    }
-    
-    /* Parse hex string */
-    int len = parse_hex_string(line, buffer, max_len);
-    if (len < 0) {
-        printf("[Transport] ERROR: Invalid hex input\n");
-        return 0;
-    }
-    
-    return (u16)len;
-}
-
-static void stdio_send_response(const u8 *data, u16 data_len, u16 sw) {
-    char hex_str[512];
-    
-    if (data_len > 0) {
-        bytes_to_hex(data, data_len, hex_str, sizeof(hex_str));
-        printf("Response Data (%u bytes): %s\n", data_len, hex_str);
-    }
-    
-    printf("SW: %04X\n", sw);
-    printf("\n");
 }
 
 /* ============================================================================
@@ -291,12 +249,6 @@ GCOSResult gcos_transport_init(TransportMode mode, u16 port) {
     current_mode = mode;
     
     switch (mode) {
-        case TRANSPORT_MODE_STDIO:
-            printf("[Transport] Initialized STDIO mode\n");
-            printf("[Transport] Enter APDU as hex string (e.g., 00A4040008A000000003000000)\n");
-            printf("[Transport] Type 'quit' or 'exit' to terminate\n\n");
-            break;
-            
         case TRANSPORT_MODE_TCP_SERVER:
             printf("[Transport] Initializing TCP server mode on port %u\n", port);
             if (socket_init_server(port) < 0) {
@@ -320,13 +272,11 @@ u16 gcos_transport_receive_apdu(u8 *buffer, u16 max_len) {
     }
     
     switch (current_mode) {
-        case TRANSPORT_MODE_STDIO:
-            return stdio_receive_apdu(buffer, max_len);
-            
         case TRANSPORT_MODE_TCP_SERVER:
             return socket_receive_apdu(buffer, max_len);
             
         default:
+            printf("[Transport] ERROR: Unsupported mode for receive\n");
             return 0;
     }
 }
@@ -338,15 +288,12 @@ void gcos_transport_send_response(const u8 *data, u16 data_len, u16 sw) {
     }
     
     switch (current_mode) {
-        case TRANSPORT_MODE_STDIO:
-            stdio_send_response(data, data_len, sw);
-            break;
-            
         case TRANSPORT_MODE_TCP_SERVER:
             socket_send_response(data, data_len, sw);
             break;
             
         default:
+            printf("[Transport] ERROR: Unsupported mode for send\n");
             break;
     }
 }
@@ -379,32 +326,54 @@ TransportMode gcos_transport_get_mode(void) {
 
 s8 gcos_transport_send_byte(u8 byte) {
     switch (current_mode) {
-        case TRANSPORT_MODE_STDIO: {
-            /* In STDIO mode, print the character directly */
-            putchar((char)byte);
-            fflush(stdout);
-            return 0;
-        }
-            
         case TRANSPORT_MODE_TCP_SERVER: {
 #ifdef GCOS_PLATFORM_WIN32
             if (socket_fd == -1) {
+#ifdef TRANSPORT_DEBUG
+                printf("[TRANSPORT DEBUG] ERROR: Socket not connected\n");
+#endif
                 return -1;
             }
             
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] Sending byte via TCP: 0x%02X ('%c')...\n", 
+                   byte, (byte >= 32 && byte < 127) ? byte : '.');
+#endif
+            
             int n = send(socket_fd, (const char*)&byte, 1, 0);
+#ifdef TRANSPORT_DEBUG
+            if (n != 1) {
+                printf("[TRANSPORT DEBUG] send() returned %d (expected 1)\n", n);
+            }
+#endif
             return (n == 1) ? 0 : -1;
 #else
             if (socket_fd == -1) {
+#ifdef TRANSPORT_DEBUG
+                printf("[TRANSPORT DEBUG] ERROR: Socket not connected\n");
+#endif
                 return -1;
             }
             
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] Sending byte via TCP: 0x%02X ('%c')...\n", 
+                   byte, (byte >= 32 && byte < 127) ? byte : '.');
+#endif
+            
             ssize_t n = write(socket_fd, &byte, 1);
+#ifdef TRANSPORT_DEBUG
+            if (n != 1) {
+                printf("[TRANSPORT DEBUG] write() returned %ld (expected 1)\n", (long)n);
+            }
+#endif
             return (n == 1) ? 0 : -1;
 #endif
         }
             
         default:
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] ERROR: Invalid transport mode\n");
+#endif
             return -1;
     }
 }
@@ -415,45 +384,77 @@ s8 gcos_transport_receive_byte(u8 *byte) {
     }
     
     switch (current_mode) {
-        case TRANSPORT_MODE_STDIO: {
-            /* In STDIO mode, read a single character */
-            int c = getchar();
-            if (c == EOF) {
-                return -1;
-            }
-            *byte = (u8)c;
-            return 0;
-        }
-            
         case TRANSPORT_MODE_TCP_SERVER: {
 #ifdef GCOS_PLATFORM_WIN32
             if (socket_fd == -1) {
+#ifdef TRANSPORT_DEBUG
+                printf("[TRANSPORT DEBUG] ERROR: Socket not connected\n");
+#endif
                 return -1;
             }
+            
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] Waiting to receive byte on socket %d...\n", socket_fd);
+#endif
             
             char c;
             int n = recv(socket_fd, &c, 1, 0);
             if (n != 1) {
+#ifdef TRANSPORT_DEBUG
+                printf("[TRANSPORT DEBUG] recv() returned %d (expected 1)\n", n);
+                if (n == 0) {
+                    printf("[TRANSPORT DEBUG] Connection closed by peer\n");
+                } else {
+                    printf("[TRANSPORT DEBUG] recv() error: %d\n", WSAGetLastError());
+                }
+#endif
                 return -1;
             }
             *byte = (u8)(c & 0xFF);
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] TCP received byte: 0x%02X ('%c')\n", 
+                   *byte, (*byte >= 32 && *byte < 127) ? *byte : '.');
+#endif
             return 0;
 #else
             if (socket_fd == -1) {
+#ifdef TRANSPORT_DEBUG
+                printf("[TRANSPORT DEBUG] ERROR: Socket not connected\n");
+#endif
                 return -1;
             }
+            
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] Waiting to receive byte on socket %d...\n", socket_fd);
+#endif
             
             char c;
             ssize_t n = read(socket_fd, &c, 1);
             if (n != 1) {
+#ifdef TRANSPORT_DEBUG
+                printf("[TRANSPORT DEBUG] read() returned %ld (expected 1)\n", (long)n);
+                if (n == 0) {
+                    printf("[TRANSPORT DEBUG] Connection closed by peer\n");
+                } else {
+                    printf("[TRANSPORT DEBUG] read() error: %d (%s)\n", 
+                           errno, strerror(errno));
+                }
+#endif
                 return -1;
             }
             *byte = (u8)(c & 0xFF);
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] TCP received byte: 0x%02X ('%c')\n", 
+                   *byte, (*byte >= 32 && *byte < 127) ? *byte : '.');
+#endif
             return 0;
 #endif
         }
             
         default:
+#ifdef TRANSPORT_DEBUG
+            printf("[TRANSPORT DEBUG] ERROR: Invalid transport mode\n");
+#endif
             return -1;
     }
 }

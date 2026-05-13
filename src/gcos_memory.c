@@ -251,11 +251,11 @@ u32 gcos_memory_heap_alloc(GCOSVM *vm, u32 size) {
         return 0;
     }
     
-    /* 分配并返回偏移地址 */
+    /* Allocate and return offset address */
     u32 addr = vm->runtime.heap_used;
     vm->runtime.heap_used += aligned_size;
     
-    /* 清零分配的内存 */
+    /* Clear allocated memory */
     memset(&vm->runtime.heap[addr], 0, aligned_size);
     
     GCOS_PRINTF("[GCOS Memory] Heap allocated: addr=%u, size=%u (aligned=%u)\n",
@@ -265,21 +265,21 @@ u32 gcos_memory_heap_alloc(GCOSVM *vm, u32 size) {
 }
 
 /**
- * @brief 释放堆内存
- * @param vm VM实例
- * @param addr 偏移地址
- * @return GCOS_SUCCESS 成功，其他值失败
+ * @brief Free heap memory
+ * @param vm VM instance
+ * @param addr Offset address
+ * @return GCOS_SUCCESS on success, other values indicate failure
  * 
- * @note 当前实现是简化版，仅支持LIFO释放
- * @note TODO: 实现完整的空闲链表或位图管理
+ * @note Current implementation is simplified, only supports LIFO deallocation
+ * @note TODO: Implement complete free list or bitmap management
  */
 GCOSResult gcos_memory_heap_free(GCOSVM *vm, u32 addr) {
     if (vm == NULL) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 简化实现：仅支持释放最后分配的块 */
-    /* TODO: 实现完整的堆管理器 */
+    /* Simplified implementation: only supports freeing the last allocated block */
+    /* TODO: Implement complete heap manager */
     
     GCOS_PRINTF("[GCOS Memory] Warning: heap_free is simplified (LIFO only)\n");
     
@@ -287,12 +287,12 @@ GCOSResult gcos_memory_heap_free(GCOSVM *vm, u32 addr) {
 }
 
 /**
- * @brief 从堆读取数据
- * @param vm VM实例
- * @param addr 偏移地址
- * @param data 输出缓冲区
- * @param size 读取大小
- * @return GCOS_SUCCESS 成功，其他值失败
+ * @brief Read data from heap
+ * @param vm VM instance
+ * @param addr Offset address
+ * @param data Output buffer
+ * @param size Read size
+ * @return GCOS_SUCCESS on success, other values indicate failure
  */
 GCOSResult gcos_memory_heap_read(const GCOSVM *vm, u32 addr, u8 *data, u32 size) {
     if (vm == NULL || data == NULL) {
@@ -311,12 +311,12 @@ GCOSResult gcos_memory_heap_read(const GCOSVM *vm, u32 addr, u8 *data, u32 size)
 }
 
 /**
- * @brief 向堆写入数据
- * @param vm VM实例
- * @param addr 偏移地址
- * @param data 输入数据
- * @param size 写入大小
- * @return GCOS_SUCCESS 成功，其他值失败
+ * @brief Write data to heap
+ * @param vm VM instance
+ * @param addr Offset address
+ * @param data Input data
+ * @param size Write size
+ * @return GCOS_SUCCESS on success, other values indicate failure
  */
 GCOSResult gcos_memory_heap_write(GCOSVM *vm, u32 addr, const u8 *data, u32 size) {
     if (vm == NULL || data == NULL) {
@@ -360,7 +360,7 @@ GCOSResult gcos_memory_clear_heap(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 模块代码区操作
+ * API Implementation - Module Code Area Operations
  * ============================================================================ */
 
 GCOSResult gcos_memory_code_read(const GCOSVM *vm, u32 offset, u8 *code, u32 size) {
@@ -375,8 +375,8 @@ GCOSResult gcos_memory_code_read(const GCOSVM *vm, u32 offset, u8 *code, u32 siz
         return GCOS_ERROR_MEMORY_ACCESS;
     }
     
-    /* TODO: 从实际模块代码区读取 */
-    /* 目前返回占位符 */
+    /* TODO: Read from actual module code area */
+    /* Currently returns placeholder */
     memset(code, 0, size);
     
     return GCOS_SUCCESS;
@@ -394,8 +394,8 @@ GCOSResult gcos_memory_code_write(GCOSVM *vm, u32 offset, const u8 *code, u32 si
         return GCOS_ERROR_MEMORY_ACCESS;
     }
     
-    /* TODO: 写入实际模块代码区 */
-    /* 目前仅更新大小 */
+    /* TODO: Write to actual module code area */
+    /* Currently only updates size */
     if (offset + size > vm->runtime.code_size) {
         vm->runtime.code_size = offset + size;
     }
@@ -411,7 +411,7 @@ u32 gcos_memory_get_code_size(const GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 内存统计和调试
+ * API Implementation - Memory Statistics and Debugging
  * ============================================================================ */
 
 void gcos_memory_print_stats(const GCOSVM *vm) {
@@ -446,31 +446,31 @@ GCOSResult gcos_memory_validate(const GCOSVM *vm) {
     
     bool valid = true;
     
-    /* 验证执行器栈 */
+    /* Validate executor stack */
     if (vm->runtime.stack_pointer > GCOS_EXECUTOR_STACK_SIZE) {
         printf("[GCOS Memory] Validation Error: Stack pointer out of range\n");
         valid = false;
     }
     
-    /* 验证间接栈 */
+    /* Validate indirect stack */
     if (vm->runtime.indirect_stack_pointer > GCOS_INDIRECT_STACK_SIZE) {
         printf("[GCOS Memory] Validation Error: Indirect stack pointer out of range\n");
         valid = false;
     }
     
-    /* 验证全局数据区 */
+    /* Validate global data area */
     if (vm->runtime.global_data_used > GCOS_GLOBAL_DATA_SIZE) {
         printf("[GCOS Memory] Validation Error: Global data overflow\n");
         valid = false;
     }
     
-    /* 验证堆 */
+    /* Validate heap */
     if (vm->runtime.heap_used > GCOS_HEAP_SIZE) {
         printf("[GCOS Memory] Validation Error: Heap overflow\n");
         valid = false;
     }
     
-    /* 验证代码区 */
+    /* Validate code area */
     if (vm->runtime.code_size > GCOS_MODULE_CODE_SIZE) {
         printf("[GCOS Memory] Validation Error: Code size overflow\n");
         valid = false;

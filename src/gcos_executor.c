@@ -61,10 +61,10 @@ static u64 get_current_time_us(void) {
 }
 
 /**
- * @brief 检查断点
- * @param vm VM实例
- * @param pc 程序计数器
- * @return true 遇到断点，false 继续执行
+ * @brief Check breakpoint
+ * @param vm VM instance
+ * @param pc Program counter
+ * @return true if breakpoint hit, false to continue execution
  */
 static bool check_breakpoint(GCOSVM *vm, u32 pc) {
     if (g_executor_state.breakpoint_count == 0) {
@@ -83,8 +83,8 @@ static bool check_breakpoint(GCOSVM *vm, u32 pc) {
 }
 
 /**
- * @brief 更新栈使用峰值
- * @param vm VM实例
+ * @brief Update stack usage peak
+ * @param vm VM instance
  */
 static void update_stack_peak(GCOSVM *vm) {
     if (vm->runtime.stack_pointer > g_executor_state.stack_peak) {
@@ -93,27 +93,27 @@ static void update_stack_peak(GCOSVM *vm) {
 }
 
 /**
- * @brief 取指
- * @param vm VM实例
- * @return 操作码，0xFF表示错误
+ * @brief Fetch instruction
+ * @param vm VM instance
+ * @return Opcode, 0xFF indicates error
  */
 static u8 fetch_instruction(GCOSVM *vm) {
     if (vm == NULL || vm->current_module_index == GCOS_INVALID_INDEX) {
         return 0xFF;
     }
     
-    /* TODO: 从模块代码区取指 */
-    /* 目前返回占位符 */
+    /* TODO: Fetch instruction from module code area */
+    /* Currently returns placeholder */
     return 0x00;
 }
 
 /**
- * @brief 解码指令
- * @param vm VM实例
- * @param opcode 操作码
- * @param operands 输出操作数数组
- * @param operand_count 输出操作数数量
- * @return GCOS_SUCCESS 成功，其他值失败
+ * @brief Decode instruction
+ * @param vm VM instance
+ * @param opcode Opcode
+ * @param operands Output operand array
+ * @param operand_count Output operand count
+ * @return GCOS_SUCCESS on success, other values indicate failure
  */
 static GCOSResult decode_instruction(GCOSVM *vm, u8 opcode, 
                                       u32 *operands, u8 *operand_count) {
@@ -121,20 +121,20 @@ static GCOSResult decode_instruction(GCOSVM *vm, u8 opcode,
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* TODO: 根据操作码解码指令 */
-    /* 目前返回占位符 */
+    /* TODO: Decode instruction based on opcode */
+    /* Currently returns placeholder */
     *operand_count = 0;
     
     return GCOS_SUCCESS;
 }
 
 /**
- * @brief 执行指令
- * @param vm VM实例
- * @param opcode 操作码
- * @param operands 操作数数组
- * @param operand_count 操作数数量
- * @return GCOS_SUCCESS 成功，其他值失败
+ * @brief Execute instruction
+ * @param vm VM instance
+ * @param opcode Opcode
+ * @param operands Operand array
+ * @param operand_count Operand count
+ * @return GCOS_SUCCESS on success, other values indicate failure
  */
 static GCOSResult execute_instruction(GCOSVM *vm, u8 opcode,
                                        const u32 *operands, u8 operand_count) {
@@ -142,10 +142,10 @@ static GCOSResult execute_instruction(GCOSVM *vm, u8 opcode,
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* TODO: 根据操作码执行指令 */
-    /* 目前返回占位符 */
+    /* TODO: Execute instruction based on opcode */
+    /* Currently returns placeholder */
     
-    /* 更新统计信息 */
+    /* Update statistics */
     vm->stats.instructions_executed++;
     g_executor_state.instruction_count++;
     
@@ -153,7 +153,7 @@ static GCOSResult execute_instruction(GCOSVM *vm, u8 opcode,
 }
 
 /* ============================================================================
- * API 实现 - 执行控制
+ * API Implementation - Execution Control
  * ============================================================================ */
 
 GCOSResult gcos_executor_start(GCOSVM *vm) {
@@ -227,15 +227,15 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 启动执行 */
+    /* Start execution */
     GCOSResult result = gcos_executor_start(vm);
     if (result != GCOS_SUCCESS) {
         return result;
     }
     
-    /* 主执行循环 */
+    /* Main execution loop */
     while (g_executor_state.running && !g_executor_state.paused) {
-        /* 检查异常 */
+        /* Check exceptions */
         if (vm->runtime.exception != EXCEPTION_NONE) {
             GCOS_PRINTF("[GCOS Executor] Exception detected: %s\n",
                    gcos_vm_exception_to_string(vm->runtime.exception));
@@ -243,7 +243,7 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
             break;
         }
         
-        /* 取指 */
+        /* Fetch instruction */
         u8 opcode = fetch_instruction(vm);
         if (opcode == 0xFF) {
             GCOS_PRINTF("[GCOS Executor] Failed to fetch instruction\n");
@@ -252,12 +252,12 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
             break;
         }
         
-        /* 检查断点 */
+        /* Check breakpoint */
         if (check_breakpoint(vm, vm->runtime.program_counter)) {
             break;
         }
         
-        /* 解码 */
+        /* Decode */
         u32 operands[4];
         u8 operand_count = 0;
         result = decode_instruction(vm, opcode, operands, &operand_count);
@@ -268,24 +268,24 @@ GCOSResult gcos_executor_run(GCOSVM *vm) {
             break;
         }
         
-        /* 执行 */
+        /* Execute */
         result = execute_instruction(vm, opcode, operands, operand_count);
         if (result != GCOS_SUCCESS) {
             GCOS_PRINTF("[GCOS Executor] Failed to execute instruction\n");
             break;
         }
         
-        /* 更新栈峰值 */
+        /* Update stack peak */
         update_stack_peak(vm);
         
-        /* 更新程序计数器 */
+        /* Update program counter */
         vm->runtime.program_counter++;
     }
     
-    /* 停止执行 */
+    /* Stop execution */
     gcos_executor_stop(vm);
     
-    /* 计算执行时间 */
+    /* Calculate execution time */
     u64 end_time_us = get_current_time_us();
     vm->total_execution_time_us = end_time_us - g_executor_state.start_time_us;
     
@@ -300,14 +300,14 @@ GCOSResult gcos_executor_step(GCOSVM *vm) {
         return GCOS_ERROR_NULL_POINTER;
     }
     
-    /* 单步执行一条指令 */
-    /* TODO: 实现单步执行 */
+    /* Single-step one instruction */
+    /* TODO: Implement single-stepping */
     
     return GCOS_SUCCESS;
 }
 
 /* ============================================================================
- * API 实现 - 断点管理
+ * API Implementation - Breakpoint Management
  * ============================================================================ */
 
 GCOSResult gcos_executor_add_breakpoint(GCOSVM *vm, u32 address) {
@@ -334,7 +334,7 @@ GCOSResult gcos_executor_remove_breakpoint(GCOSVM *vm, u32 address) {
     
     for (u8 i = 0; i < g_executor_state.breakpoint_count; i++) {
         if (g_executor_state.breakpoints[i] == address) {
-            /* 移除断点 */
+            /* Remove breakpoint */
             for (u8 j = i; j < g_executor_state.breakpoint_count - 1; j++) {
                 g_executor_state.breakpoints[j] = g_executor_state.breakpoints[j + 1];
             }
@@ -362,7 +362,7 @@ GCOSResult gcos_executor_clear_breakpoints(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 异常处理
+ * API Implementation - Exception Handling
  * ============================================================================ */
 
 void gcos_executor_throw_exception(GCOSVM *vm, GCOSExceptionType exception,
@@ -395,7 +395,7 @@ void gcos_executor_clear_exception(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * API 实现 - 调试支持
+ * API Implementation - Debug Support
  * ============================================================================ */
 
 void gcos_executor_set_trace(GCOSVM *vm, bool enable) {
@@ -403,7 +403,7 @@ void gcos_executor_set_trace(GCOSVM *vm, bool enable) {
         return;
     }
     
-    /* TODO: 实现指令追踪 */
+    /* TODO: Implement instruction tracing */
     printf("[GCOS Executor] Trace %s\n", enable ? "enabled" : "disabled");
 }
 
@@ -414,7 +414,7 @@ void gcos_executor_print_current_instruction(const GCOSVM *vm) {
     }
     
     printf("[GCOS Executor] Current PC: %u\n", vm->runtime.program_counter);
-    /* TODO: 打印当前指令详情 */
+    /* TODO: Print current instruction details */
 }
 
 void gcos_executor_get_stats(const GCOSVM *vm, u64 *instruction_count,
@@ -448,7 +448,7 @@ void gcos_executor_reset_stats(GCOSVM *vm) {
 }
 
 /* ============================================================================
- * Profiling 支持
+ * Profiling Support
  * ============================================================================ */
 
 void gcos_executor_start_profiling(GCOSVM *vm) {
