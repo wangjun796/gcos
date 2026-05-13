@@ -14,6 +14,7 @@
 
 #include "gcos_apdu.h"
 #include <string.h>
+#include <stdio.h>
 
 /* ============================================================================
  * Internal Constants
@@ -204,7 +205,11 @@ ApduHandler gcos_apdu_find_handler(GCOSVM *vm, u8 ins) {
 static u16 apdu_handler_load(GCOSVM *vm, const GCOSSApdu *apdu, 
                              u8 *response, u16 *resp_len) {
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     switch (apdu->p1) {
         case 0x00: /* Initialize load */
@@ -240,7 +245,11 @@ static u16 apdu_handler_install(GCOSVM *vm, const GCOSSApdu *apdu,
     (void)vm;
     (void)apdu;
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     /* TODO: Implement application installation */
     return SW_FUNCTION_NOT_SUPPORTED;
@@ -256,7 +265,11 @@ static u16 apdu_handler_delete(GCOSVM *vm, const GCOSSApdu *apdu,
     (void)vm;
     (void)apdu;
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     /* TODO: Implement application deletion */
     return SW_FUNCTION_NOT_SUPPORTED;
@@ -272,7 +285,11 @@ static u16 apdu_handler_select(GCOSVM *vm, const GCOSSApdu *apdu,
     (void)vm;
     (void)apdu;
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 (no data returned for unsupported command) */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     /* TODO: Implement application selection */
     return SW_FUNCTION_NOT_SUPPORTED;
@@ -288,7 +305,11 @@ static u16 apdu_handler_deselect(GCOSVM *vm, const GCOSSApdu *apdu,
     (void)vm;
     (void)apdu;
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     /* TODO: Implement application deselection */
     return SW_FUNCTION_NOT_SUPPORTED;
@@ -304,7 +325,11 @@ static u16 apdu_handler_get_status(GCOSVM *vm, const GCOSSApdu *apdu,
     (void)vm;
     (void)apdu;
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     /* TODO: Implement status query */
     return SW_FUNCTION_NOT_SUPPORTED;
@@ -320,7 +345,11 @@ static u16 apdu_handler_manage_channel(GCOSVM *vm, const GCOSSApdu *apdu,
     (void)vm;
     (void)apdu;
     (void)response;
-    (void)resp_len;
+    
+    /* Set response length to 0 */
+    if (resp_len != NULL) {
+        *resp_len = 0;
+    }
     
     /* TODO: Implement channel management */
     return SW_FUNCTION_NOT_SUPPORTED;
@@ -486,4 +515,19 @@ u16 gcos_vm_process_apdu(GCOSVM *vm, const u8 *apdu_buffer, u8 apdu_length,
     
     /* Step 7: Return status word */
     return sw;
+}
+
+u16 gcos_vm_process_apdu_with_conn_type(GCOSVM *vm, const u8 *apdu_buffer, u8 apdu_length,
+                                        u8 *response_buffer, u16 *response_length,
+                                        GCOSConnType conn_type) {
+    /* Step 0: Set connection type in VM context */
+    if (vm != NULL) {
+        vm->current_conn_type = conn_type;
+        printf("[VM] Connection type set to: %s\n", 
+               conn_type == GCOS_CONN_TYPE_T0 ? "T=0 (contacted)" : "T=CL (contactless)");
+    }
+    
+    /* Step 1-7: Delegate to standard APDU processing */
+    return gcos_vm_process_apdu(vm, apdu_buffer, apdu_length, 
+                                response_buffer, response_length);
 }

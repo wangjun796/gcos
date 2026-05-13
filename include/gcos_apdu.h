@@ -204,6 +204,24 @@ u16 gcos_vm_process_apdu(GCOSVM *vm, const u8 *apdu_buffer, u8 apdu_length,
                          u8 *response_buffer, u16 *response_length);
 
 /**
+ * @brief Process a single APDU command with connection type
+ * 
+ * Extended version of gcos_vm_process_apdu that accepts connection type
+ * to distinguish between T=0 (contacted) and T=CL (contactless) protocols.
+ * 
+ * @param vm              Pointer to GCOS VM instance
+ * @param apdu_buffer     Raw APDU bytes from terminal
+ * @param apdu_length     Length of APDU buffer
+ * @param response_buffer Buffer for response data
+ * @param response_length [out] Length of response data
+ * @param conn_type       Connection type (T=0 or T=CL)
+ * @return                Status word (SW1SW2)
+ */
+u16 gcos_vm_process_apdu_with_conn_type(GCOSVM *vm, const u8 *apdu_buffer, u8 apdu_length,
+                                        u8 *response_buffer, u16 *response_length,
+                                        GCOSConnType conn_type);
+
+/**
  * @brief Parse raw APDU bytes into GCOSSApdu structure
  * 
  * @param apdu_buffer   Raw APDU bytes

@@ -344,6 +344,17 @@ typedef struct GCOSAppInstance GCOSAppInstance;
 typedef struct GCOSRuntimeContext GCOSRuntimeContext;
 
 /**
+ * @brief Connection type (T=0 or T=CL)
+ * 
+ * Used to distinguish between contacted (T=0) and contactless (T=CL) protocols.
+ * Port 9000 -> T=0, Port 9900 -> T=CL
+ */
+typedef enum {
+    GCOS_CONN_TYPE_T0 = 0,   /**< T=0 protocol (contacted, port 9000) */
+    GCOS_CONN_TYPE_T5 = 2    /**< T=CL protocol (contactless, port 9900) */
+} GCOSConnType;
+
+/**
  * @brief 版本信息结构
  */
 typedef struct {
@@ -635,6 +646,9 @@ struct GCOSVM {
         u32 max_execution_time;     /* 最大执行时间 (毫秒, 0=无限制) */
         u32 stack_guard_size;       /* 栈保护区域大小 */
     } config;
+    
+    /* Connection type (T=0 or T=CL) */
+    GCOSConnType current_conn_type; /**< Current connection type from JCShell */
 };
 
 /* ============================================================================

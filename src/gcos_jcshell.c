@@ -86,6 +86,19 @@ static int process_client_connection(int client_sock, u16 port) {
     u8 type;
     u8 cmd;
     
+    /* Determine connection type based on port */
+    GCOSConnType conn_type;
+    if (port == 9000) {
+        conn_type = GCOS_CONN_TYPE_T0;
+        printf("[JCShell] Connection type: T=0 (contacted, port %u)\n", port);
+    } else if (port == 9900) {
+        conn_type = GCOS_CONN_TYPE_T5;
+        printf("[JCShell] Connection type: T=CL (contactless, port %u)\n", port);
+    } else {
+        printf("[JCShell] ERROR: Unknown port %u\n", port);
+        return -1;
+    }
+    
     printf("[JCShell] Client connected on port %u\n", port);
     
     /* Main message processing loop */
@@ -185,8 +198,9 @@ static int process_client_connection(int client_sock, u16 port) {
             continue;
         }
         
-        /* Step 4: Regular APDU command - forward to VM */
-        printf("[JCShell] Processing APDU command (%u bytes)\n", data_size);
+        /* Step 4: Regular APDU command - forward to VM with connection type */
+        printf("[JCShell] Processing APDU command (%u bytes, conn_type=%d)\n", 
+               data_size, conn_type);
         
         /* Get VM instance */
         extern GCOSVM* gcos_vm_get_instance(void);
@@ -215,12 +229,14 @@ static int process_client_connection(int client_sock, u16 port) {
             continue;
         }
         
-        /* Process APDU through VM */
-        u8 response_buffer[RESPONSE_BUFFER_SIZE];
+        /* Process APDU through VM with connection type */
         memset(response_buffer, 0, RESPONSE_BUFFER_SIZE);  /* Clear buffer */
-        u16 response_length = RESPONSE_BUFFER_SIZE;
-        u16 sw = gcos_vm_process_apdu(vm, apdu_buffer, data_size,
-                                     response_buffer, &response_length);
+        u16 response_length = 0;  /* Initialize to 0, VM will set actual length */
+        u16 sw = gcos_vm_process_apdu_with_conn_type(
+            vm, apdu_buffer, data_size,
+            response_buffer, &response_length,
+            conn_type
+        );
         
         printf("[JCShell] VM returned SW=0x%04X, Response=%u bytes\n", 
                sw, response_length);
