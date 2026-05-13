@@ -153,26 +153,20 @@ static int process_single_apdu(void) {
 static void print_usage(const char *program_name) {
     printf("Usage: %s [options]\n", program_name);
     printf("\nOptions:\n");
-    printf("  -t, --tcp [PORT]     Use TCP server mode (default port: %u)\n", DEFAULT_TCP_PORT);
-    printf("  -j, --jcshell        Use JCShell server (TLP224 protocol, ports 9000/9900)\n");
+    printf("  -j, --jcshell        Use JCShell server (TLP224 protocol, ports 9000/9900) [DEFAULT]\n");
     printf("  -T, --tlp            Use TLP Server for JCRE (port 9025, cref-compatible)\n");
     printf("  -h, --help           Show this help message\n");
     printf("\nExamples:\n");
-    printf("  %s -t               # TCP server on port %u\n", program_name, DEFAULT_TCP_PORT);
-    printf("  %s -t 9028          # TCP server on port 9028\n", program_name);
-    printf("  %s -j               # JCShell server (TLP224)\n", program_name);
+    printf("  %s                  # JCShell server (default, ports 9000/9900)\n", program_name);
+    printf("  %s -j               # JCShell server (same as default)\n", program_name);
     printf("  %s -T               # TLP Server (JCRE mode, port 9025)\n", program_name);
-    printf("\nTCP Mode:\n");
-    printf("  Connect using: nc localhost <PORT>\n");
-    printf("  Or use a smart card terminal tool\n");
     printf("\nJCShell Mode:\n");
-    printf("  Uses TLP224 protocol (ASCII hex encoding)\n");
-    printf("  Compatible with cref\n");
-    printf("\nTLP Server Mode (JCRE):\n");
-    printf("  Listens on port 9025\n");
-    printf("  Receives APDU from JCShell via TLP protocol\n");
-    printf("  Architecture: JCShell (9000/9900) <-> TLP <-> GCOS (9025)\n");
-    printf("\n");
+    printf("  Connect using IBM JCShell or compatible card terminal tool\n");
+    printf("  Protocol: Binary [type][cmd][size_hi][size_lo][data...]\n");
+    printf("  Ports: 9000 (contacted), 9900 (contactless)\n");
+    printf("\nNote:\n");
+    printf("  GCOS only supports JCShell mode (compatible with cref architecture).\n");
+    printf("  TCP Server mode has been removed to maintain architectural consistency.\n");
 }
 
 /* ============================================================================
@@ -205,13 +199,14 @@ int main(int argc, char *argv[]) {
     
     /* Parse command-line arguments */
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--tcp") == 0) {
-            mode = TRANSPORT_MODE_TCP_SERVER;
-            if (i + 1 < argc) {
-                tcp_port = (u16)atoi(argv[++i]);
-            }
-        } else if (strcmp(argv[i], "-j") == 0 || strcmp(argv[i], "--jcshell") == 0) {
-            mode = TRANSPORT_MODE_JCSHELL;
+        // TCP mode removed - GCOS only supports JCShell mode (compatible with cref)
+        // if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--tcp") == 0) {
+        //     mode = TRANSPORT_MODE_TCP_SERVER;
+        //     if (i + 1 < argc) {
+        //         tcp_port = (u16)atoi(argv[++i]);
+        //     }
+        if (strcmp(argv[i], "-j") == 0 || strcmp(argv[i], "--jcshell") == 0) {
+            mode = TRANSPORT_MODE_JCSHELL;  /* Default mode */
         } else if (strcmp(argv[i], "-T") == 0 || strcmp(argv[i], "--tlp") == 0) {
             mode = TRANSPORT_MODE_TLP_SERVER;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -238,10 +233,11 @@ int main(int argc, char *argv[]) {
     
     /* Step 2: Initialize transport layer based on mode */
     switch (mode) {
-        case TRANSPORT_MODE_TCP_SERVER:
-            printf("\n[Transport] Initializing TCP Server mode on port %u...\n", tcp_port);
-            result = gcos_transport_init(mode, tcp_port);
-            break;
+        // TCP Server mode removed - GCOS only supports JCShell mode
+        // case TRANSPORT_MODE_TCP_SERVER:
+        //     printf("\n[Transport] Initializing TCP Server mode on port %u...\n", tcp_port);
+        //     result = gcos_transport_init(TRANSPORT_PROTOCOL_T0, tcp_port);
+        //     break;
             
         case TRANSPORT_MODE_JCSHELL:
             printf("\n[JCShell] Initializing JCShell server (TLP224 protocol)...\n");
@@ -278,8 +274,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    /* Step 3: Initialize TLP and T=0 protocol layers (only for certain modes) */
-    if (mode == TRANSPORT_MODE_JCSHELL || mode == TRANSPORT_MODE_TCP_SERVER) {
+    /* Step 3: Initialize TLP and T=0 protocol layers (only for JCShell mode) */
+    if (mode == TRANSPORT_MODE_JCSHELL) {
         printf("\n[T=0] Initializing TLP and T=0 protocol layers...\n");
         t0_protocol_init(&g_tlp_msg);
     }

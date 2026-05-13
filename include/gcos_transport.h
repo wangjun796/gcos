@@ -2,13 +2,31 @@
 #define GCOS_TRANSPORT_H
 
 #include "gcos_vm.h"
+#include "gcos_hal.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ============================================================================
- * Transport Mode Definitions
+ * Transport Protocol Definitions
  * ============================================================================ */
 
 /**
- * @brief Transport mode for APDU communication
+ * @brief Transport protocol type (simplified from v2)
+ */
+typedef enum {
+    TRANSPORT_PROTOCOL_T0 = 0,        /**< T=0 protocol (ISO 7816-3) */
+    TRANSPORT_PROTOCOL_TCL = 2        /**< T=CL protocol (ISO 14443-4) */
+} TransportProtocol;
+
+/* ============================================================================
+ * Backward Compatibility: Old Transport Mode Enum
+ * ============================================================================ */
+
+/**
+ * @brief Legacy transport mode (deprecated, use TransportProtocol instead)
+ * @note Kept for backward compatibility with gcos_main.c
  */
 typedef enum {
     TRANSPORT_MODE_TCP_SERVER = 0,      /**< TCP server (accept client connections) */
@@ -18,51 +36,66 @@ typedef enum {
 } TransportMode;
 
 /* ============================================================================
- * Transport API
+ * Transport API (Unified - based on v2 implementation)
  * ============================================================================ */
 
 /**
  * @brief Initialize transport layer
  * 
- * @param mode  Transport mode (STDIO, TCP_SERVER, SERIAL)
- * @param port  Port number (only used for TCP_SERVER mode)
- * @return      GCOS_SUCCESS on success, error code otherwise
+ * Sets up the transport layer with specified protocol.
+ * Uses HAL for hardware abstraction.
+ * 
+ * @param protocol  Transport protocol (T0 or TCL)
+ * @param port      Port number (for TCP mode)
+ * @return GCOSResult
  */
-GCOSResult gcos_transport_init(TransportMode mode, u16 port);
+GCOSResult gcos_transport_init(TransportProtocol protocol, u16 port);
 
 /**
- * @brief Receive APDU from terminal/card reader
+ * @brief Receive complete APDU command
  * 
- * Blocks until an APDU is received or connection is closed.
+ * Receives and parses APDU according to protocol specifications.
+ * For T=0: receives header + data bytes
+ * For T=CL: receives complete APDU frame
  * 
- * @param buffer    Buffer to store received APDU
- * @param max_len   Maximum buffer length
- * @return          Actual APDU length, or 0 if connection closed/EOF
+ * @param apdu_buffer  APDU receive buffer
+ * @param max_len      Maximum buffer length
+ * @return APDU length (>0), 0 if no data, -1 on error
  */
-u16 gcos_transport_receive_apdu(u8 *buffer, u16 max_len);
+s16 gcos_transport_receive_apdu(u8 *apdu_buffer, u16 max_len);
 
 /**
- * @brief Send response to terminal/card reader
+ * @brief Send APDU response
  * 
- * @param data      Response data (can be NULL if no data)
- * @param data_len  Length of response data
- * @param sw        Status word (SW1SW2)
+ * Formats and sends response data with status word.
+ * 
+ * @param data       Response data (can be NULL)
+ * @param data_len   Response data length
+ * @param sw         Status word (SW1SW2)
+ * @return GCOSResult
  */
-void gcos_transport_send_response(const u8 *data, u16 data_len, u16 sw);
+GCOSResult gcos_transport_send_response(const u8 *data, u16 data_len, u16 sw);
 
 /**
- * @brief Cleanup transport resources
+ * @brief Cleanup transport layer
  * 
- * Closes sockets and releases resources.
+ * Releases all transport resources.
  */
 void gcos_transport_cleanup(void);
 
 /**
- * @brief Get current transport mode
+ * @brief Get current transport protocol
  * 
- * @return Current transport mode
+ * @return Current protocol type
  */
-TransportMode gcos_transport_get_mode(void);
+TransportProtocol gcos_transport_get_protocol(void);
+
+/**
+ * @brief Check if transport is initialized
+ * 
+ * @return true if initialized, false otherwise
+ */
+bool gcos_transport_is_initialized(void);
 
 /* ============================================================================
  * Low-Level Byte I/O (for TLP224 encoding/decoding)
@@ -87,5 +120,9 @@ s8 gcos_transport_send_byte(u8 byte);
  * @return      0 on success, -1 on error
  */
 s8 gcos_transport_receive_byte(u8 *byte);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GCOS_TRANSPORT_H */

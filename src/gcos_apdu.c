@@ -41,6 +41,8 @@ static u16 apdu_handler_get_status(GCOSVM *vm, const GCOSSApdu *apdu,
                                    u8 *response, u16 *resp_len);
 static u16 apdu_handler_manage_channel(GCOSVM *vm, const GCOSSApdu *apdu, 
                                        u8 *response, u16 *resp_len);
+static u16 apdu_handler_echo(GCOSVM *vm, const GCOSSApdu *apdu, 
+                             u8 *response, u16 *resp_len);  /* Echo test handler */
 
 /* ============================================================================
  * APDU Command Table
@@ -53,13 +55,15 @@ static u16 apdu_handler_manage_channel(GCOSVM *vm, const GCOSSApdu *apdu,
  * so frequently used commands should be placed first for performance.
  */
 static const ApduCommandEntry apdu_command_table[] = {
-    { INS_SELECT,         apdu_handler_select,        "SELECT" },
-    { INS_DESELECT,       apdu_handler_deselect,      "DESELECT" },
-    { INS_LOAD,           apdu_handler_load,          "LOAD" },
-    { INS_INSTALL,        apdu_handler_install,       "INSTALL" },
-    { INS_DELETE,         apdu_handler_delete,        "DELETE" },
-    { INS_GET_STATUS,     apdu_handler_get_status,    "GET STATUS" },
-    { INS_MANAGE_CHANNEL, apdu_handler_manage_channel,"MANAGE CHANNEL" },
+    /* All commands temporarily use echo handler for testing */
+    { INS_SELECT,         apdu_handler_echo,          "SELECT (Temp: Echo)" },
+    { INS_DESELECT,       apdu_handler_echo,          "DESELECT (Temp: Echo)" },
+    { INS_LOAD,           apdu_handler_echo,          "LOAD (Temp: Echo)" },
+    { INS_INSTALL,        apdu_handler_echo,          "INSTALL (Temp: Echo)" },
+    { INS_DELETE,         apdu_handler_echo,          "DELETE (Temp: Echo)" },
+    { INS_GET_STATUS,     apdu_handler_echo,          "GET STATUS (Temp: Echo)" },
+    { INS_MANAGE_CHANNEL, apdu_handler_echo,          "MANAGE CHANNEL (Temp: Echo)" },
+    { 0xFF,               apdu_handler_echo,          "ECHO (Test)" },
     { 0x00,               NULL,                       NULL }  /* Terminator */
 };
 
@@ -185,8 +189,10 @@ ApduHandler gcos_apdu_find_handler(GCOSVM *vm, u8 ins) {
         }
         entry++;
     }
-    
-    return NULL; /* Not found */
+    return NULL;
+    /* If not found, use echo handler as default (for testing) */
+    // printf("[APDU] INS 0x%02X not in command table, using ECHO handler\n", ins);
+    // return apdu_handler_echo;
 }
 
 /* ============================================================================
@@ -530,4 +536,62 @@ u16 gcos_vm_process_apdu_with_conn_type(GCOSVM *vm, const u8 *apdu_buffer, u8 ap
     /* Step 1-7: Delegate to standard APDU processing */
     return gcos_vm_process_apdu(vm, apdu_buffer, apdu_length, 
                                 response_buffer, response_length);
+}
+
+/* ============================================================================
+ * Echo Test Handler - Returns received data as-is
+ * ============================================================================ */
+
+/**
+ * @brief ECHO command handler (INS = 0xFF)
+ * 
+ * This is a test command that echoes back the received APDU data.
+ * Useful for testing communication channels and verifying data integrity.
+ * 
+ * Format:
+ *   CLA INS P1 P2 Lc [Data...]
+ *   0x80 0xFF 0x00 0x00 <Lc> <Data...>
+ * 
+ * Response:
+ *   [Data...] SW1 SW2
+ *   Where [Data...] is the exact data received in the command
+ *   SW = 0x9000 (Success)
+ */
+static u16 apdu_handler_echo(GCOSVM *vm, const GCOSSApdu *apdu, 
+                             u8 *response, u16 *resp_len) {
+    (void)vm;
+    
+    if (response == NULL || resp_len == NULL) {
+        return SW_NO_PRECISE_DIAGNOSIS;
+    }
+    
+    /* Check if there's data to echo */
+    if (apdu->data == NULL || apdu->lc == 0) {
+        /* No data, just return success with empty response */
+        *resp_len = 0;
+        printf("[ECHO] No data to echo, returning empty response\n");
+        return SW_SUCCESS;
+    }
+    
+    /* Copy received data to response buffer */
+    u16 data_len = apdu->lc;
+    if (data_len > RESPONSE_BUFFER_SIZE - 2) {
+        /* Data too large (need space for SW) */
+        printf("[ECHO] ERROR: Data too large (%u bytes, max %u)\n", 
+               data_len, RESPONSE_BUFFER_SIZE - 2);
+        return SW_WRONG_LENGTH;
+    }
+    
+    memcpy(response, apdu->data, data_len);
+    *resp_len = data_len;
+    
+    printf("[ECHO] Echoing %u bytes of data\n", data_len);
+    printf("[ECHO] Data: ");
+    for (u16 i = 0; i < data_len && i < 32; i++) {
+        printf("%02X", response[i]);
+    }
+    if (data_len > 32) printf("...");
+    printf("\n");
+    
+    return SW_SUCCESS;
 }
