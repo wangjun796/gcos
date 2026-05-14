@@ -98,6 +98,8 @@ typedef double      f64;
 #define MAX_MODULES                     32      /* Maximum number of modules */
 #define MAX_APPS                        64      /* Maximum applications (including ISD) */
 #define MAX_APPS_PER_MODULE             16      /* Maximum applications per module */
+#define MAX_IMPORTS                     8       /* ⭐ NEW: Maximum imports per module (like cref) */
+#define MAX_EXPORTS                     32      /* ⭐ NEW: Maximum exports per module */
 #define MAX_FUNCTIONS                   256     /* Maximum functions */
 #define MAX_CHANNELS                    8       /* Maximum logical channels (COS3 spec) */
 #define MAX_IMPORT_MODULES              31      /* Maximum import modules (Table 19) */
@@ -391,6 +393,64 @@ typedef struct {
 } GCOSAID;
 
 /**
+ * @brief Module lifecycle states (similar to cref PackageEntry status)
+ */
+typedef enum {
+    MODULE_NOT_LOADED = 0x00,       /* Not loaded */
+    MODULE_LOADED = 0x01,           /* Loaded but not verified */
+    MODULE_VERIFIED = 0x02,         /* Verified, ready to create app instances */
+    MODULE_ERROR = 0xFF             /* Load error */
+} GCOSModuleState;
+
+/**
+ * @brief Import dependency information (based on COS3 Specification Table 22)
+ * 
+ * Corresponds to IMPORT_MODULE_ITEMS in SEF file import section.
+ */
+typedef struct {
+    u32 module_version;               /* Required module version (u32 format per Appendix B) */
+    GCOSAID module_aid;               /* Dependency module AID */
+    bool resolved;                    /* Whether dependency is resolved */
+    u8 resolved_module_id;            /* Resolved module ID (0xFF if not resolved) */
+} GCOSImportInfo;
+
+/**
+ * @brief LOAD command state machine (similar to cref installer)
+ */
+typedef enum {
+    LOAD_STATE_IDLE = 0x00,           /* Idle */
+    LOAD_STATE_INITIALIZATION = 0x01, /* Initialization phase (INSTALL FOR LOAD) */
+    LOAD_STATE_LOADING_BLOCKS = 0x02, /* Loading data blocks (LOAD BLOCKS) */
+    LOAD_STATE_FINALIZATION = 0x03,   /* Finalization phase (FINALIZE) */
+    LOAD_STATE_ERROR = 0xFF           /* Error state */
+} GCOSLoadState;
+
+/**
+ * @brief LOAD context (maintains state across multiple APDUs)
+ * 
+ * Tracks LOAD command progress, similar to cref's installer global variables.
+ */
+typedef struct {
+    GCOSLoadState state;              /* Current state */
+    u8 target_module_id;              /* Target module ID */
+    GCOSAID package_aid;              /* Package AID */
+    u32 package_version;              /* Package version (u32 format per COS3 Appendix B) */
+    u8 sd_id;                         /* Security domain ID */
+    
+    u32 total_size;                   /* Total size */
+    u32 loaded_size;                  /* Loaded size */
+    
+    u8 buffer[GCOS_MODULE_CODE_SIZE]; /* Temporary buffer for SEF data */
+    u32 buffer_size;                  /* Buffer size */
+    
+    u8 import_count;                  /* Number of imports */
+    GCOSImportInfo imports[MAX_IMPORTS]; /* Import list */
+    
+    u8 app_count;                     /* Number of applications */
+    GCOSAID app_aids[MAX_APPS];       /* Application AID list */
+} GCOSLoadContext;
+
+/**
  * @brief Application Lifecycle States (Based on GP Specification)
  */
 typedef enum {
@@ -455,49 +515,83 @@ typedef struct {
 
 /**
  * @brief 模块信息 (COS3规范7.2)
+ * 
+ * Enhanced with cref PackageEntry-like fields for better package management.
  */
 struct GCOSModule {
-    GCOSAID module_aid;             /* 模块AID */
-    GCOSModuleType type;            /* 模块类型 (应用/库) */
-    u32 version;                    /* 版本号 */
+    /* === Basic Information === */
+    u8 module_id;                   /* ⭐ NEW: Internal module ID (like cref package_id) */
+    GCOSAID module_aid;             /* Module AID */
+    GCOSModuleType type;            /* Module type (application/library) */
     
-    /* 数据区 */
-    u8 *global_data;                /* 模块全局数据 (易失性) */
-    u32 global_data_size;           /* 全局数据大小 */
+    /* ⭐ NEW: Module version (u32 format per COS3 Appendix B) */
+    u32 version;                    /* Module version (major.minor.revision.internal) */
     
-    const u8 *readonly_data;        /* 模块只读数据 (非易失性,ROM) */
-    u32 readonly_data_size;         /* 只读数据大小 */
+    /* ⭐ NEW: Module state (replaces simple loaded bool) */
+    GCOSModuleState state;          /* Module state */
     
-    u8 *domain_data;                /* 模块域数据 (非易失性,堆) */
-    u32 domain_data_size;           /* 域数据大小 */
+    /* ⭐ NEW: Security domain ID (like cref sdID) */
+    u8 security_domain_id;          /* Owning security domain ID (0xFF = ISD) */
     
-    /* 代码区 */
-    const u8 *code;                 /* 模块程序代码 (非易失性,ROM) */
-    u32 code_size;                  /* 代码大小 */
+    /* === Dependency Management (like cref importedPackages) === */
+    GCOSImportInfo imports[MAX_IMPORTS];  /* ⭐ NEW: Import dependency list */
+    u8 import_count;                        /* Number of imported packages */
     
-    /* 函数表 */
-    GCOSFunctionHeader *functions;  /* 函数头数组 */
-    u16 function_count;             /* 函数数量 */
+    /* === Data Areas === */
+    u8 *global_data;                /* Module global data (volatile) */
+    u32 global_data_size;           /* Global data size */
     
-    /* 导入/导出表 */
-    void *import_table;             /* 导入表 */
-    u16 import_count;               /* 导入数量 */
+    const u8 *readonly_data;        /* Module read-only data (non-volatile, ROM) */
+    u32 readonly_data_size;         /* Read-only data size */
     
-    void *export_table;             /* 导出表 */
-    u16 export_count;               /* 导出数量 */
+    u8 *domain_data;                /* Module domain data (non-volatile, heap) */
+    u32 domain_data_size;           /* Domain data size */
     
-    /* 应用实例列表 */
+    /* === Code Area === */
+    const u8 *code;                 /* Module program code (non-volatile, ROM) */
+    u32 code_size;                  /* Code size */
+    
+    /* === Function Table === */
+    GCOSFunctionHeader *functions;  /* Function header array */
+    u16 function_count;             /* Number of functions */
+    
+    /* === Export Table === */
+    void *export_table;             /* Export table */
+    u16 export_count;               /* Number of exports */
+    
+    /* === Application Instance List === */
     GCOSAppInstance *app_instances[MAX_APPS_PER_MODULE];
-    u8 app_instance_count;          /* 应用实例数量 */
+    u8 app_instance_count;          /* Number of application instances */
     
-    bool loaded;                    /* 是否已加载 */
-    bool initialized;               /* 是否已初始化 */
+    /* ⭐ DEPRECATED: Use 'state' field instead */
+    bool loaded;                    /* Legacy flag (kept for compatibility) */
+    bool initialized;               /* Whether initialized */
+    
+    /* === Resource Quotas (Phase 2 - Optional) === */
+    // u32 code_quota;              /* Code space quota */
+    // u32 data_quota;              /* Data space quota */
+    // u32 ram_quota;               /* RAM quota */
+    // u32 used_code;               /* Used code space */
+    // u32 used_data;               /* Used data space */
+    // u32 used_ram;                /* Used RAM */
 };
+
+/**
+ * @brief 应用类型枚举
+ */
+typedef enum {
+    APP_TYPE_REGULAR = 0x00,        /* 普通应用 */
+    APP_TYPE_ISD = 0x01,            /* 初始安全域 (Initial Security Domain) */
+    APP_TYPE_SSD = 0x02,            /* 补充安全域 (Supplementary Security Domain) */
+    APP_TYPE_CASD = 0x04,           /* 可认证安全域 */
+    APP_TYPE_FCSD = 0x05,           /* 最终卡安全域 */
+} GCOSAppType;
 
 /**
  * @brief 应用实例结构
  * 
  * 参考 cref 的设计，每个应用只有一个 process() 方法
+ * 同时添加了 GlobalPlatform 规范要求的元数据字段
  */
 struct GCOSAppInstance {
     /* === 基本信息 === */
@@ -506,7 +600,30 @@ struct GCOSAppInstance {
     u16 module_index;               /* 所属模块索引 */
     GCOSAppLifecycleState lifecycle;/* 生命周期状态 */
     
+    /* === 新增：类型、权限和安全域 ⭐ === */
+    GCOSAppType app_type;           /* 应用类型 (APP/ISD/SSD) */
+    u8 security_domain_id;          /* 所属安全域 ID (0xFF = ISD) */
+    u8 privilege_byte1;             /* 权限字节 1 (特权标志) */
+    u8 privilege_byte2;             /* 权限字节 2 */
+    u8 privilege_byte3;             /* 权限字节 3 */
+    u8 install_param;               /* 安装参数 (来自 INSTALL 命令 P2) */
+    
     /* === APDU 处理方法 ⭐ === */
+    /**
+     * @brief 应用的 install() 方法（可选）
+     * 
+     * 在应用创建时调用，用于初始化应用实例
+     * 类似于 cref 中的 Applet.install(byte[], byte, byte)
+     * 
+     * @param app 应用实例指针
+     * @param install_data 安装数据（来自 INSTALL 命令的数据域）
+     * @param install_data_len 安装数据长度
+     * @return GCOS_SUCCESS 成功，其他表示失败
+     */
+    GCOSResult (*on_install)(struct GCOSAppInstance *app,
+                             const u8 *install_data,
+                             u16 install_data_len);
+    
     /**
      * @brief 应用的 process() 方法指针
      * 
@@ -683,6 +800,9 @@ struct GCOSVM {
     GCOSModule modules[MAX_MODULES];/* 模块数组 */
     u8 module_count;                /* 已加载模块数 */
     u8 current_module_index;        /* 当前模块索引 */
+    
+    /* ⭐ NEW: LOAD command context (for multi-APDU loading) */
+    GCOSLoadContext load_context;   /* LOAD state machine context */
     
     /* 应用管理 */
     GCOSAppInstance apps[MAX_APPS];     /* 应用实例数组（静态分配）*/

@@ -218,6 +218,14 @@ static GCOSResult create_isd_application(GCOSVM *vm) {
     // Set application ID
     isd->app_id = APP_FIRST;
     
+    // ⭐ Set ISD type and privileges
+    isd->app_type = APP_TYPE_ISD;
+    isd->security_domain_id = APP_FIRST;  // ISD is its own security domain
+    isd->privilege_byte1 = 0xFF;  // ISD has all privileges
+    isd->privilege_byte2 = 0xFF;
+    isd->privilege_byte3 = 0xFF;
+    isd->install_param = 0x00;
+    
     // Set lifecycle state to SELECTABLE
     isd->lifecycle = APPLICATION_SELECTABLE;
     
@@ -307,6 +315,20 @@ GCOSResult app_register(GCOSVM *vm,
                         void (*on_deselect)(GCOSAppInstance *),
                         u16 module_index,
                         u8 *app_id) {
+    return app_register_ex(vm, app_aid, process_func, on_select, on_deselect, NULL, module_index, APP_TYPE_REGULAR, 0xFF, 0x00, app_id);
+}
+
+GCOSResult app_register_ex(GCOSVM *vm,
+                           const GCOSAID *app_aid,
+                           u16 (*process_func)(GCOSAppInstance *, const u8 *, u16, u8 *, u16 *),
+                           GCOSResult (*on_select)(GCOSAppInstance *),
+                           void (*on_deselect)(GCOSAppInstance *),
+                           GCOSResult (*on_install)(GCOSAppInstance *, const u8 *, u16),
+                           u16 module_index,
+                           GCOSAppType app_type,
+                           u8 security_domain_id,
+                           u8 privilege_byte1,
+                           u8 *app_id) {
     if (vm == NULL || app_aid == NULL || process_func == NULL) {
         return GCOS_ERROR_INVALID_PARAM;
     }
@@ -327,10 +349,19 @@ GCOSResult app_register(GCOSVM *vm,
     app->module_index = module_index;
     app->lifecycle = APPLICATION_INSTALLED;
     
+    // ⭐ Set type, security domain, and privileges
+    app->app_type = app_type;
+    app->security_domain_id = security_domain_id;
+    app->privilege_byte1 = privilege_byte1;
+    app->privilege_byte2 = 0x00;  // Default
+    app->privilege_byte3 = 0x00;  // Default
+    app->install_param = 0x00;    // Default
+    
     // ⭐ Set method pointers
     app->process = process_func;
     app->on_select = on_select;
     app->on_deselect = on_deselect;
+    app->on_install = on_install;
     
     // Initialize state
     app->is_selected = false;

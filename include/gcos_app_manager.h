@@ -52,6 +52,36 @@ GCOSResult app_register(GCOSVM *vm,
                         u8 *app_id);
 
 /**
+ * @brief Register a new application (extended version with full parameters)
+ * 
+ * Creates a new application instance with specified type, security domain, and privileges.
+ * 
+ * @param vm VM instance
+ * @param app_aid Application AID
+ * @param process_func Process method pointer (required)
+ * @param on_select Select callback (optional, can be NULL)
+ * @param on_deselect Deselect callback (optional, can be NULL)
+ * @param on_install Install callback (optional, can be NULL)
+ * @param module_index Module index
+ * @param app_type Application type (APP_TYPE_REGULAR, APP_TYPE_ISD, etc.)
+ * @param security_domain_id Security domain ID (0xFF = ISD)
+ * @param privilege_byte1 Privilege byte 1
+ * @param[out] app_id Output: assigned application ID
+ * @return GCOS_SUCCESS on success, error code otherwise
+ */
+GCOSResult app_register_ex(GCOSVM *vm,
+                           const GCOSAID *app_aid,
+                           u16 (*process_func)(GCOSAppInstance *, const u8 *, u16, u8 *, u16 *),
+                           GCOSResult (*on_select)(GCOSAppInstance *),
+                           void (*on_deselect)(GCOSAppInstance *),
+                           GCOSResult (*on_install)(GCOSAppInstance *, const u8 *, u16),
+                           u16 module_index,
+                           GCOSAppType app_type,
+                           u8 security_domain_id,
+                           u8 privilege_byte1,
+                           u8 *app_id);
+
+/**
  * @brief Find application by AID
  * 
  * @param vm VM instance
