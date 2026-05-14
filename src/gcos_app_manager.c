@@ -175,26 +175,7 @@ static u16 isd_process(GCOSAppInstance *app,
             return isd_handler_select(app, apdu, apdu_len, response, resp_len);
         
         case 0xE4:  // LOAD
-        case 0xE6:  // INSTALL
-        case 0xE2:  // DELETE
-        case 0xF2:  // GET STATUS
-        case 0x50:  // INITIALIZE UPDATE
-        case 0x82:  // EXTERNAL AUTHENTICATE
-        case 0xCA:  // GET DATA
-        case 0xDA:  // PUT DATA
-            // TODO: Implement other GP commands
-            printf("[ISD] Command 0x%02X not yet implemented\n", ins);
-            
-            // For now, return echo response for testing
-            if (resp_len != NULL && response != NULL) {
-                if (apdu_len > 4 && apdu_len <= 256) {
-                    memcpy(response, &apdu[4], apdu_len - 4);
-                    *resp_len = apdu_len - 4;
-                } else {
-                    *resp_len = 0;
-                }
-            }
-            return 0x9000;  // SW_SUCCESS
+            return isd_handler_load(app, apdu, apdu_len, response, resp_len);
         
         default:
             printf("[ISD] Unsupported GP command: INS=0x%02X\n", ins);

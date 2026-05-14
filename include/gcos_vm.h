@@ -415,39 +415,205 @@ typedef struct {
 } GCOSImportInfo;
 
 /**
- * @brief LOAD command state machine (similar to cref installer)
+ * @brief Section types as per COS3 Specification Table 18
  */
 typedef enum {
-    LOAD_STATE_IDLE = 0x00,           /* Idle */
-    LOAD_STATE_INITIALIZATION = 0x01, /* Initialization phase (INSTALL FOR LOAD) */
-    LOAD_STATE_LOADING_BLOCKS = 0x02, /* Loading data blocks (LOAD BLOCKS) */
-    LOAD_STATE_FINALIZATION = 0x03,   /* Finalization phase (FINALIZE) */
-    LOAD_STATE_ERROR = 0xFF           /* Error state */
+    SECTION_UNKNOWN = 0x00,
+    SECTION_HEADER = 0x01,          /* 首段 - 模块信息、导入信息和段信息 */
+    SECTION_IMPORT = 0x02,          /* 导入段 - 导入函数信息 */
+    SECTION_FUNCTION = 0x03,        /* 函数段 - 内部函数空间信息 */
+    SECTION_APPLICATION = 0x04,     /* 应用段 - 可执行模块安装信息 */
+    SECTION_GLOBAL = 0x05,          /* 全局段 - 模块数据、应用数据空间信息 */
+    SECTION_EXPORT = 0x06,          /* 导出段 - 导出函数信息 */
+    SECTION_ELEMENT = 0x07,         /* 元素段 - 被引用的函数索引信息 */
+    SECTION_DATA = 0x08,            /* 数据段 - 模块数据、应用数据初始值信息 */
+    SECTION_CODE = 0x09,            /* 代码段 - 模块程序代码 */
+    SECTION_RESERVED_A = 0x0A,      /* 保留段 */
+    SECTION_RESERVED_B = 0x0B,
+    SECTION_RESERVED_C = 0x0C,
+    SECTION_RESERVED_D = 0x0D,
+    SECTION_RESERVED_E = 0x0E,
+    SECTION_CUSTOM = 0x0F           /* 自定义段 */
+} GCOSSectionType;
+
+/**
+ * @brief Section parsing sub-states
+ * 
+ * Tracks progress within a section for streaming parsing.
+ * Each section may span multiple APDUs, so we need to track:
+ * 1. Which section we're parsing
+ * 2. Which item within the section we're on
+ * 3. How many bytes of current item received so far
+ */
+typedef enum {
+    SECTION_PARSE_IDLE = 0x00,              /* Not parsing any section */
+    
+    /* Section header parsing (common to all sections) */
+    SECTION_PARSE_HEADER = 0x01,            /* Parsing section_id + size (5 bytes) */
+    
+    /* 首段 (SECTION_HEADER) sub-states */
+    SECTION_HEADER_PARSE_SEF_INFO = 0x10,   /* Parsing sef_info structure */
+    SECTION_HEADER_PARSE_SEF_LEN = 0x11,    /* Parsing sef_len (4 bytes) */
+    SECTION_HEADER_PARSE_IMPORT_COUNT = 0x12, /* Parsing import_module_count (1 byte) */
+    SECTION_HEADER_PARSE_IMPORT_FUNC_COUNT = 0x13, /* Parsing import_function_count (2 bytes) */
+    SECTION_HEADER_PARSE_APP_NUM = 0x14,    /* Parsing app_num (1 byte) */
+    SECTION_HEADER_PARSE_SEC_FUNC_LEN = 0x15, /* Parsing sec_func_len (2 bytes) */
+    SECTION_HEADER_PARSE_SEC_ELEM_LEN = 0x16, /* Parsing sec_elem_len (2 bytes) */
+    SECTION_HEADER_PARSE_SEC_DATA_LEN = 0x17, /* Parsing sec_data_len (2 bytes) */
+    SECTION_HEADER_PARSE_SEC_CODE_LEN = 0x18, /* Parsing sec_code_len (4 bytes) */
+    
+    /* 导入段 (SECTION_IMPORT) sub-states */
+    SECTION_IMPORT_PARSE_MODULE_COUNT = 0x20, /* Parsing import_module_count (1 byte) */
+    SECTION_IMPORT_PARSE_FUNC_COUNT = 0x21,   /* Parsing import_function_count (2 bytes) */
+    SECTION_IMPORT_PARSE_MODULE_ITEMS = 0x22, /* Parsing import_module_items array */
+    SECTION_IMPORT_PARSE_FUNC_ITEMS = 0x23,   /* Parsing import_function_items array */
+    
+    /* 函数段 (SECTION_FUNCTION) sub-states */
+    SECTION_FUNCTION_PARSE_CODE_SIZES = 0x30, /* Parsing code_size array */
+    
+    /* 应用段 (SECTION_APPLICATION) sub-states */
+    SECTION_APPLICATION_PARSE_APP_NUM = 0x40, /* Parsing app_num (1 byte) */
+    SECTION_APPLICATION_PARSE_APP_INFO = 0x41, /* Parsing app_info array */
+    
+    /* 全局段 (SECTION_GLOBAL) sub-states */
+    SECTION_GLOBAL_PARSE_BASES = 0x50,        /* Parsing base addresses (6 x u16) */
+    
+    /* 导出段 (SECTION_EXPORT) sub-states */
+    SECTION_EXPORT_PARSE_FUNC_IDXS = 0x60,    /* Parsing function_idxs array */
+    
+    /* 元素段 (SECTION_ELEMENT) sub-states */
+    SECTION_ELEMENT_PARSE_FUNC_IDXS = 0x70,   /* Parsing function_idxs array */
+    
+    /* 数据段 (SECTION_DATA) sub-states */
+    SECTION_DATA_PARSE_SIZES = 0x80,          /* Parsing size fields */
+    SECTION_DATA_PARSE_RODATA = 0x81,         /* Parsing rodata */
+    SECTION_DATA_PARSE_RWDATA = 0x82,         /* Parsing rwdata */
+    SECTION_DATA_PARSE_MODDATA = 0x83,        /* Parsing moddata */
+    SECTION_DATA_PARSE_APPDATA = 0x84,        /* Parsing appdata */
+    
+    /* 代码段 (SECTION_CODE) sub-states */
+    SECTION_CODE_PARSE_BYTECODE = 0x90,       /* Parsing bytecode */
+    
+    /* 自定义段 (SECTION_CUSTOM) sub-states */
+    SECTION_CUSTOM_PARSE_DATA = 0xF0          /* Parsing custom data */
+} GCOSSectionParseState;
+
+/**
+ * @brief LOAD command state machine (based on COS3 Specification Section 8.2.1)
+ * 
+ * Enhanced to support streaming section parsing across multiple APDUs.
+ */
+typedef enum {
+    LOAD_STATE_IDLE = 0x00,              /* Idle - no active load session */
+    LOAD_STATE_INITIALIZATION = 0x01,    /* Initialization phase (INSTALL FOR LOAD, P1=0x00) */
+    LOAD_STATE_LOADING_BLOCKS = 0x02,    /* Loading SEF data blocks (LOAD BLOCKS, P1=0x01) */
+    LOAD_STATE_PARSING_SECTIONS = 0x03,  /* Parsing sections from buffered SEF data */
+    LOAD_STATE_LINKING = 0x04,           /* Linking imports and resolving references */
+    LOAD_STATE_FINALIZATION = 0x05,      /* Finalization phase (FINALIZE, P1=0x02) */
+    LOAD_STATE_ERROR = 0xFF              /* Error state */
 } GCOSLoadState;
+
+/**
+ * @brief Item parsing context for streaming section parsing
+ * 
+ * Used to track progress when parsing array items that may span APDUs.
+ */
+typedef struct {
+    u32 item_index;                   /* Current item index in array */
+    u32 item_count;                   /* Total number of items */
+    u32 item_size;                    /* Size of each item (bytes) */
+    u32 bytes_received;               /* Bytes received for current item */
+    u8 item_buffer[32];               /* Buffer for accumulating current item */
+} GCOSItemParseContext;
 
 /**
  * @brief LOAD context (maintains state across multiple APDUs)
  * 
- * Tracks LOAD command progress, similar to cref's installer global variables.
+ * Tracks LOAD command progress with enhanced section parsing state machine.
+ * Supports streaming parsing where sections may span multiple APDUs.
  */
 typedef struct {
-    GCOSLoadState state;              /* Current state */
+    GCOSLoadState state;              /* Current LOAD state */
     u8 target_module_id;              /* Target module ID */
     GCOSAID package_aid;              /* Package AID */
     u32 package_version;              /* Package version (u32 format per COS3 Appendix B) */
     u8 sd_id;                         /* Security domain ID */
     
-    u32 total_size;                   /* Total size */
-    u32 loaded_size;                  /* Loaded size */
-    
+    /* === SEF Data Buffer === */
     u8 buffer[GCOS_MODULE_CODE_SIZE]; /* Temporary buffer for SEF data */
-    u32 buffer_size;                  /* Buffer size */
+    u32 buffer_size;                  /* Actual data size in buffer */
+    u32 buffer_offset;                /* Current read position in buffer */
     
-    u8 import_count;                  /* Number of imports */
-    GCOSImportInfo imports[MAX_IMPORTS]; /* Import list */
+    /* === Section Parsing State === */
+    GCOSSectionType current_section;  /* Section being parsed */
+    u8 section_index;                 /* Index in expected section sequence (0-9) */
+    GCOSSectionParseState parse_state; /* Current parse sub-state */
+    u32 section_size;                 /* Expected section content size (from header) */
+    u32 section_offset;               /* Bytes parsed in current section */
     
-    u8 app_count;                     /* Number of applications */
-    GCOSAID app_aids[MAX_APPS];       /* Application AID list */
+    /* === Section Headers (from 首段) === */
+    u32 sef_version;
+    GCOSAID sef_aid;
+    u32 sef_len;
+    u8 expected_import_module_count;
+    u16 expected_import_func_count;
+    u8 expected_app_num;
+    u16 sec_func_len;
+    u16 sec_elem_len;
+    u16 sec_data_len;
+    u32 sec_code_len;
+    
+    /* === 首段 (Header Section) === */
+    u32 header_offset;                /* Progress in parsing 首段 */
+    
+    /* === 导入段 (Import Section) === */
+    GCOSItemParseContext import_module_ctx;  /* Context for parsing import_module_items */
+    GCOSItemParseContext import_func_ctx;    /* Context for parsing import_function_items */
+    u8 import_count;
+    GCOSImportInfo imports[MAX_IMPORTS];
+    
+    /* === 函数段 (Function Section) === */
+    GCOSItemParseContext function_ctx; /* Context for parsing code_size array */
+    u16 function_count;
+    
+    /* === 应用段 (Application Section) === */
+    GCOSItemParseContext app_info_ctx; /* Context for parsing app_info array */
+    u8 app_count;
+    GCOSAID app_aids[MAX_APPS];
+    u16 app_builder_methods[MAX_APPS];
+    
+    /* === 全局段 (Global Section) === */
+    u16 rodata_base;
+    u16 rwdata_base;
+    u16 refdata_base;
+    u16 moddata_base;
+    u16 appdata_base;
+    u16 data_end;
+    
+    /* === 导出段 (Export Section) === */
+    GCOSItemParseContext export_ctx;   /* Context for parsing function_idxs */
+    u16 export_count;
+    
+    /* === 元素段 (Element Section) === */
+    GCOSItemParseContext element_ctx;  /* Context for parsing function_idxs */
+    u16 element_count;
+    
+    /* === 数据段 (Data Section) === */
+    u16 rodata_size;
+    u16 rwdata_init_size;
+    u16 moddata_init_size;
+    u16 appdata_init_size;
+    GCOSItemParseContext rodata_ctx;   /* Context for parsing rodata */
+    GCOSItemParseContext rwdata_ctx;   /* Context for parsing rwdata */
+    GCOSItemParseContext moddata_ctx;  /* Context for parsing moddata */
+    GCOSItemParseContext appdata_ctx;  /* Context for parsing appdata */
+    
+    /* === 代码段 (Code Section) === */
+    GCOSItemParseContext code_ctx;     /* Context for parsing bytecode */
+    
+    /* === 自定义段 (Custom Section) === */
+    u32 custom_section_size;
+    GCOSItemParseContext custom_ctx;   /* Context for parsing custom data */
 } GCOSLoadContext;
 
 /**
@@ -910,6 +1076,14 @@ GCOSResult gcos_vm_unload_module(GCOSVM *vm, u8 module_index);
  * @return 模块索引, 0xFF 表示未找到
  */
 u8 gcos_vm_find_module_by_aid(GCOSVM *vm, const GCOSAID *aid);
+
+/**
+ * @brief 根据模块 ID 查找模块
+ * @param vm VM 指针
+ * @param module_id 模块 ID
+ * @return 模块指针, NULL 表示未找到
+ */
+GCOSModule* gcos_vm_find_module_by_id(GCOSVM *vm, u8 module_id);
 
 /* --- 应用管理 --- */
 

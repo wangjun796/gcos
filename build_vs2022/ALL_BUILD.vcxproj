@@ -1,0 +1,253 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ResolveNugetPackages>false</ResolveNugetPackages>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E5D7AB1B-EC23-3FF9-99C5-0752E8D38CDB}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>ALL_BUILD</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\views\gcos\prog\cos\gcos_vm\include;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\eflash_ftl;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\views\gcos\prog\cos\gcos_vm\include;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\eflash_ftl;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\views\gcos\prog\cos\gcos_vm\include;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\eflash_ftl;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <Midl>
+      <AdditionalIncludeDirectories>E:\views\gcos\prog\cos\gcos_vm\include;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\eflash_ftl;E:\views\gcos\prog\cos\gcos_vm\..\eflash-master\ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\views\gcos\prog\cos\gcos_vm\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule E:/views/gcos/prog/cos/gcos_vm/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+D:\CMake\bin\cmake.exe -SE:/views/gcos/prog/cos/gcos_vm -BE:/views/gcos/prog/cos/gcos_vm/build_vs2022 --check-stamp-file E:/views/gcos/prog/cos/gcos_vm/build_vs2022/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeRCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule E:/views/gcos/prog/cos/gcos_vm/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+D:\CMake\bin\cmake.exe -SE:/views/gcos/prog/cos/gcos_vm -BE:/views/gcos/prog/cos/gcos_vm/build_vs2022 --check-stamp-file E:/views/gcos/prog/cos/gcos_vm/build_vs2022/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeRCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule E:/views/gcos/prog/cos/gcos_vm/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+D:\CMake\bin\cmake.exe -SE:/views/gcos/prog/cos/gcos_vm -BE:/views/gcos/prog/cos/gcos_vm/build_vs2022 --check-stamp-file E:/views/gcos/prog/cos/gcos_vm/build_vs2022/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeRCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule E:/views/gcos/prog/cos/gcos_vm/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+D:\CMake\bin\cmake.exe -SE:/views/gcos/prog/cos/gcos_vm -BE:/views/gcos/prog/cos/gcos_vm/build_vs2022 --check-stamp-file E:/views/gcos/prog/cos/gcos_vm/build_vs2022/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\CMake\share\cmake-4.3\Modules\CMakeCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeCommonLanguageInclude.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeGenericSystem.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeInitializeConfigs.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeLanguageInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeRCInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInformation.cmake;D:\CMake\share\cmake-4.3\Modules\CMakeSystemSpecificInitialize.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\CMakeCommonCompilerMacros.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Compiler\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Internal\CMakeCommonLinkerInformation.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Linker\MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Linker\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-Initialize.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC-C.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows-MSVC.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\Windows.cmake;D:\CMake\share\cmake-4.3\Modules\Platform\WindowsPaths.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeRCCompiler.cmake;E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\4.3.1\CMakeSystem.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">E:\views\gcos\prog\cos\gcos_vm\build_vs2022\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\ZERO_CHECK.vcxproj">
+      <Project>{6BB36BC6-0106-385B-909E-E4B80F1AC4F8}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\ecc_lib.vcxproj">
+      <Project>{1ACF1EDA-EE43-3440-B9BC-BFBF3283CE75}</Project>
+      <Name>ecc_lib</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\eflash.vcxproj">
+      <Project>{13CC8762-C801-3140-9CD4-73A30C569D7A}</Project>
+      <Name>eflash</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\eflash_ftl_tests.vcxproj">
+      <Project>{A069AF57-C48D-357C-99EB-0F8D3288026C}</Project>
+      <Name>eflash_ftl_tests</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\eflash_ftl_tests_extension.vcxproj">
+      <Project>{8A49FD05-8246-3E81-8FB9-E3A89FBB0A8A}</Project>
+      <Name>eflash_ftl_tests_extension</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\example_simple.vcxproj">
+      <Project>{D443412C-E476-3A08-BB81-311FDBA90F81}</Project>
+      <Name>example_simple</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\gcos_demo.vcxproj">
+      <Project>{EA517FA4-390F-3B79-A9D9-A68187ED718B}</Project>
+      <Name>gcos_demo</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_aid_prefix_match.vcxproj">
+      <Project>{B04C8E4E-C9CD-3027-B1F7-75B3AE221048}</Project>
+      <Name>test_aid_prefix_match</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_app_manager.vcxproj">
+      <Project>{1BAC2E50-8993-38A9-9B17-D338CC9CF600}</Project>
+      <Name>test_app_manager</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_app_metadata.vcxproj">
+      <Project>{C8BA3DC0-A1BF-368F-A9FD-62D89F2BAFEB}</Project>
+      <Name>test_app_metadata</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_basic.vcxproj">
+      <Project>{40738874-3845-3CAE-8034-33B5D7E9A7B1}</Project>
+      <Name>test_basic</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_gcos_vm_simple.vcxproj">
+      <Project>{A1C3F789-BA14-3450-84FF-9C584507F16E}</Project>
+      <Name>test_gcos_vm_simple</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_jcshell_client.vcxproj">
+      <Project>{983DE19E-AB14-332F-8390-491B5305A0E4}</Project>
+      <Name>test_jcshell_client</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_jcshell_server.vcxproj">
+      <Project>{CC971DE4-7124-336E-8623-4B072C818A6F}</Project>
+      <Name>test_jcshell_server</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_load_command.vcxproj">
+      <Project>{2EAF7AEF-6F61-3790-8999-DEB2375A226A}</Project>
+      <Name>test_load_command</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_persistence.vcxproj">
+      <Project>{E8A01FC8-ADC7-37D4-84BF-F03D1462C442}</Project>
+      <Name>test_persistence</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_select_command.vcxproj">
+      <Project>{CD3870C5-DACF-3CF5-9880-C581BC032434}</Project>
+      <Name>test_select_command</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_tlp224.vcxproj">
+      <Project>{57EC60A4-FB5E-328D-937C-E07625442D1B}</Project>
+      <Name>test_tlp224</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\vm_core.vcxproj">
+      <Project>{A3DB7230-E1AF-3F62-832C-085B518274AC}</Project>
+      <Name>vm_core</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

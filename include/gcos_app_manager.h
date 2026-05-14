@@ -152,6 +152,34 @@ GCOSAppInstance* app_get_selected(GCOSVM *vm);
  */
 bool app_is_selected(GCOSVM *vm);
 
+/**
+ * @brief LOAD command handler (INS=0xE4)
+ * 
+ * Implements three-phase loading:
+ * - P1=0x00: INSTALL FOR LOAD
+ * - P1=0x01: LOAD BLOCKS
+ * - P1=0x02: FINALIZE
+ * 
+ * @param app ISD application instance
+ * @param apdu APDU data
+ * @param apdu_len APDU length
+ * @param response Response buffer
+ * @param resp_len Response length output
+ * @return Status word
+ */
+u16 isd_handler_load(GCOSAppInstance *app,
+                     const u8 *apdu,
+                     u16 apdu_len,
+                     u8 *response,
+                     u16 *resp_len);
+
+/**
+ * @brief Reset LOAD context (for testing)
+ * 
+ * @param vm VM instance
+ */
+void reset_load_context(GCOSVM *vm);
+
 #ifdef __cplusplus
 }
 #endif

@@ -350,6 +350,23 @@ void gcos_vm_print_info(const GCOSVM *vm) {
 }
 
 /* ============================================================================
+ * API Implementation - Module Lookup
+ * ============================================================================ */
+
+GCOSModule* gcos_vm_find_module_by_id(GCOSVM *vm, u8 module_id) {
+    if (vm == NULL) {
+        return NULL;
+    }
+    
+    for (u8 i = 0; i < vm->module_count; i++) {
+        if (vm->modules[i].module_id == module_id) {
+            return &vm->modules[i];
+        }
+    }
+    return NULL;
+}
+
+/* ============================================================================
  * API Implementation - Memory Access (Safe Version)
  * ============================================================================ */
 

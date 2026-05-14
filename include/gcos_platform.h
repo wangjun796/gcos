@@ -196,6 +196,24 @@
     #define GCOS_FORCE_INLINE         inline
 #endif
 
+/* 结构体打包宏 (跨平台) */
+#ifdef _MSC_VER
+    /* MSVC: 使用 #pragma pack */
+    #define GCOS_PACKED_START         __pragma(pack(push, 1))
+    #define GCOS_PACKED_END           __pragma(pack(pop))
+    #define GCOS_PACKED               /* 不需要后缀，由 GCOS_PACKED_START/END 包裹 */
+#elif defined(__GNUC__) || defined(__clang__)
+    /* GCC/Clang: 使用 __attribute__((packed)) */
+    #define GCOS_PACKED_START
+    #define GCOS_PACKED_END
+    #define GCOS_PACKED               __attribute__((packed))
+#else
+    /* 其他编译器: 尝试使用 attribute */
+    #define GCOS_PACKED_START
+    #define GCOS_PACKED_END
+    #define GCOS_PACKED               __attribute__((packed))
+#endif
+
 /* 未使用参数警告抑制 */
 #ifdef _MSC_VER
     #define GCOS_UNUSED(x)            ((void)(x))

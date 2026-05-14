@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\x64\Debug\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\Debug\eflash_ftl_tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\Debug\eflash_ftl_tests_extension.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\eflash-master\Debug\example_simple.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\gcos_demo.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_aid_prefix_match.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_app_manager.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_app_metadata.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_basic.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_gcos_vm_simple.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_jcshell_client.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_jcshell_server.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_load_command.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_select_command.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_tlp224.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\x64\Debug\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

@@ -1,0 +1,10 @@
+^E:\VIEWS\GCOS\PROG\COS\GCOS_VM\BUILD_VS2022\CMAKEFILES\301B10EA0518A300A04AB3D1D65A87FF\GENERATE.STAMP.RULE
+setlocal
+D:\CMake\bin\cmake.exe -SE:/views/gcos/prog/cos/gcos_vm -BE:/views/gcos/prog/cos/gcos_vm/build_vs2022 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file E:/views/gcos/prog/cos/gcos_vm/build_vs2022/gcos_vm.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
