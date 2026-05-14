@@ -14,6 +14,7 @@
 
 #include "gcos_vm.h"
 #include "gcos_platform.h"
+#include "gcos_app_manager.h"  // ⭐ Application manager
 #include <string.h>
 
 /* ============================================================================
@@ -124,17 +125,18 @@ static GCOSResult vm_instance_init(GCOSVM *vm) {
     
     /* Initialize module and application counts */
     vm->module_count = 0;
-    vm->app_count = 0;
+    // Note: app_count will be set by app_manager_init()
     vm->current_module_index = GCOS_INVALID_INDEX;
-    vm->current_app_index = GCOS_INVALID_INDEX;
     
     /* Initialize channel management */
     vm->current_channel = 0;
-    vm->active_channels = 0;
-    for (int i = 0; i < GCOS_MAX_CHANNELS; i++) {
-        vm->channels[i].selected_app_index = GCOS_INVALID_INDEX;
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        vm->channels[i].selected_app = NULL;
         vm->channels[i].active = false;
     }
+    
+    /* Initialize selected application */
+    vm->selected_app = NULL;
     
     /* Initialize state */
     vm->state = GCOS_STATE_IDLE;
@@ -143,6 +145,13 @@ static GCOSResult vm_instance_init(GCOSVM *vm) {
     /* Initialize statistics */
     vm->stats.instructions_executed = 0;
     vm->total_execution_time_us = 0;
+    
+    /* ⭐ Initialize application manager (creates ISD) */
+    GCOSResult result = app_manager_init(vm);
+    if (result != GCOS_SUCCESS) {
+        printf("[VM_INIT] ERROR: Failed to initialize application manager\n");
+        return result;
+    }
     
     return GCOS_OK;
 }

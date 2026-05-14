@@ -96,12 +96,21 @@ typedef double      f64;
 
 /* System limits (COS3 specification) */
 #define MAX_MODULES                     32      /* Maximum number of modules */
+#define MAX_APPS                        64      /* Maximum applications (including ISD) */
 #define MAX_APPS_PER_MODULE             16      /* Maximum applications per module */
 #define MAX_FUNCTIONS                   256     /* Maximum functions */
 #define MAX_CHANNELS                    8       /* Maximum logical channels (COS3 spec) */
 #define MAX_IMPORT_MODULES              31      /* Maximum import modules (Table 19) */
 #define AID_MAX_LENGTH                  16      /* Maximum AID length */
 #define GCOS_MAX_FRAME_DEPTH            64      /* Maximum call stack depth */
+
+/* Application IDs */
+#define APP_FIRST                       0       /* ISD's ID (Initial Security Domain) */
+#define APP_NULL                        0xFF    /* Invalid application ID */
+
+/* Buffer sizes */
+#define APDU_BUFFER_SIZE                260     /* APDU buffer size */
+#define RESPONSE_BUFFER_SIZE           260     /* Response buffer size */
 
 /* Opcode ranges (COS3 specification Table 41) */
 #define OPCODE_SINGLE_BYTE_MIN          0x00    /* Single-byte opcode minimum */
@@ -303,6 +312,12 @@ typedef enum {
 #define GCOS_ERROR_NOT_FOUND        GCOS_ERR_APP_NOT_FOUND
 #define GCOS_ERROR_VALIDATION_FAILED GCOS_ERR_INVALID_PARAM
 
+/* Application Manager Error Codes */
+#define GCOS_ERROR_APP_TABLE_FULL   ((GCOSResult)0x8001)
+#define GCOS_ERROR_APP_NOT_FOUND    ((GCOSResult)0x8002)
+#define GCOS_ERROR_APP_NOT_SELECTABLE ((GCOSResult)0x8003)
+#define GCOS_ERROR_CANNOT_DELETE_ISD ((GCOSResult)0x8004)
+
 /* GCOSState 别名 */
 #define GCOS_VM_STATE_IDLE          GCOS_STATE_IDLE
 #define GCOS_VM_STATE_RUNNING       GCOS_STATE_RUNNING
@@ -374,6 +389,17 @@ typedef struct {
     u8 aid[AID_MAX_LENGTH];         /* AID数据 */
     u8 length;                      /* AID长度 (1-16) */
 } GCOSAID;
+
+/**
+ * @brief Application Lifecycle States (Based on GP Specification)
+ */
+typedef enum {
+    APPLICATION_INSTALLED = 0x03,      /* Installed but not selectable */
+    APPLICATION_SELECTABLE = 0x07,     /* Can be selected */
+    APPLICATION_PERSONALIZED = 0x0F,   /* Personalized and selectable */
+    APPLICATION_LOCKED = 0x1F,         /* Locked */
+    APPLICATION_TERMINATED = 0x7F      /* Terminated */
+} GCOSAppLifecycleState;
 
 /**
  * @brief 栈帧 (COS3规范3.12)
@@ -469,14 +495,57 @@ struct GCOSModule {
 };
 
 /**
- * @brief 应用实例 (COS3规范3.7)
+ * @brief 应用实例结构
+ * 
+ * 参考 cref 的设计，每个应用只有一个 process() 方法
  */
 struct GCOSAppInstance {
+    /* === 基本信息 === */
     GCOSAID app_aid;                /* 应用AID */
+    u8 app_id;                      /* 应用 ID (0 = ISD) */
     u16 module_index;               /* 所属模块索引 */
     GCOSAppLifecycleState lifecycle;/* 生命周期状态 */
     
-    /* 应用数据 (堆上,非易失性) */
+    /* === APDU 处理方法 ⭐ === */
+    /**
+     * @brief 应用的 process() 方法指针
+     * 
+     * 类似于 cref 中的 Applet.process(APDU)
+     * 这个方法负责处理所有非 GP 管理的 APDU 命令
+     * 
+     * @param app 应用实例指针
+     * @param apdu APDU 数据
+     * @param apdu_len APDU 长度
+     * @param response 响应缓冲区
+     * @param resp_len 响应长度（输出）
+     * @return 状态字 SW
+     */
+    u16 (*process)(struct GCOSAppInstance *app,
+                   const u8 *apdu,
+                   u16 apdu_len,
+                   u8 *response,
+                   u16 *resp_len);
+    
+    /**
+     * @brief 应用的 select() 方法（可选）
+     * 
+     * 在 SELECT 命令成功后调用，用于初始化
+     * 
+     * @param app 应用实例指针
+     * @return GCOS_SUCCESS 成功，其他表示失败
+     */
+    GCOSResult (*on_select)(struct GCOSAppInstance *app);
+    
+    /**
+     * @brief 应用的 deselect() 方法（可选）
+     * 
+     * 在取消选择时调用，用于清理资源
+     * 
+     * @param app 应用实例指针
+     */
+    void (*on_deselect)(struct GCOSAppInstance *app);
+    
+    /* === 应用数据 (堆上,非易失性) === */
     u8 *app_domain_data;            /* 应用域数据 */
     u32 app_domain_data_size;       /* 应用域数据大小 */
     
@@ -486,7 +555,7 @@ struct GCOSAppInstance {
     u8 *persistent_data;            /* 持久性数据 */
     u32 persistent_data_size;       /* 持久性数据大小 */
     
-    /* 运行时数据 (每个通道独立,易失性) */
+    /* === 运行时数据 (每个通道独立,易失性) === */
     struct {
         u8 *temp_dynamic_data;      /* 临时动态数据 */
         u32 temp_dynamic_data_size; /* 临时动态数据大小 */
@@ -500,6 +569,9 @@ struct GCOSAppInstance {
     
     u8 current_channel;             /* 当前活动通道 */
     
+    /* === 状态标志 === */
+    bool is_selected;               /* 是否被选中 */
+    u8 selected_channel;            /* 选中的通道 */
     bool installed;                 /* 是否已安装 */
     u32 install_time;               /* 安装时间戳 */
 };
@@ -613,17 +685,18 @@ struct GCOSVM {
     u8 current_module_index;        /* 当前模块索引 */
     
     /* 应用管理 */
-    GCOSAppInstance *apps[MAX_MODULES * MAX_APPS_PER_MODULE];
-    u16 app_count;                  /* 已安装应用数 */
-    u8 current_app_index;           /* 当前应用索引 */
+    GCOSAppInstance apps[MAX_APPS];     /* 应用实例数组（静态分配）*/
+    u8 app_count;                        /* 已安装应用数 */
+    
+    /* ⭐ 当前选中的应用（指针）*/
+    GCOSAppInstance *selected_app;      /* 当前选中的应用实例 */
     
     /* 通道管理 */
     struct {
-        u8 selected_app_index;      /* 该通道选择的应用索引 */
-        bool active;                /* 通道是否激活 */
+        GCOSAppInstance *selected_app;  /* 该通道选择的应用 */
+        bool active;                    /* 通道是否激活 */
     } channels[MAX_CHANNELS];
-    u8 current_channel;             /* 当前通道 */
-    u8 active_channels;             /* 激活的通道数 */
+    u8 current_channel;                 /* 当前通道 */
     
     /* 统计信息 */
     struct {
@@ -669,6 +742,12 @@ GCOSVM* gcos_vm_create(void);
  * @return GCOS_OK 成功, 其他错误码
  */
 GCOSResult gcos_vm_destroy(GCOSVM *vm);
+
+/**
+ * @brief Get global VM instance
+ * @return Pointer to the global VM instance
+ */
+GCOSVM* gcos_vm_get_instance(void);
 
 /**
  * @brief 初始化 VM
@@ -1015,62 +1094,9 @@ bool gcos_vm_in_transaction(const GCOSVM *vm);
  */
 u8 gcos_vm_get_transaction_depth(const GCOSVM *vm);
 
-/* --- Application Manager --- */
-
-/**
- * @brief Install application
- * @param vm VM instance
- * @param aid Application ID
- * @param aid_length AID length
- * @param install_data Installation parameters
- * @param install_data_size Installation data size
- * @return GCOSResult Success or error code
- */
-GCOSResult gcos_vm_install_app(GCOSVM *vm, const u8 *aid, u8 aid_length,
-                               const u8 *install_data, u32 install_data_size);
-
-/**
- * @brief Delete application
- * @param vm VM instance
- * @param app_index Application index
- * @return GCOSResult Success or error code
- */
-GCOSResult gcos_vm_delete_app(GCOSVM *vm, u8 app_index);
-
-/**
- * @brief Select application
- * @param vm VM instance
- * @param aid Application ID
- * @param aid_length AID length
- * @return GCOSResult Success or error code
- */
-GCOSResult gcos_vm_select_app(GCOSVM *vm, const u8 *aid, u8 aid_length);
-
-/**
- * @brief Deselect current application
- * @param vm VM instance
- * @return GCOSResult Success or error code
- */
-GCOSResult gcos_vm_deselect_app(GCOSVM *vm);
-
-/**
- * @brief Personalize application
- * @param vm VM instance
- * @param app_index Application index
- * @param personalization_data Personalization data
- * @param data_size Data size
- * @return GCOSResult Success or error code
- */
-GCOSResult gcos_vm_personalize_app(GCOSVM *vm, u8 app_index,
-                                   const u8 *personalization_data, u32 data_size);
-
-/**
- * @brief Lock application
- * @param vm VM instance
- * @param app_index Application index
- * @return GCOSResult Success or error code
- */
-GCOSResult gcos_vm_lock_app(GCOSVM *vm, u8 app_index);
+/* ============================================================================
+ * Channel Management
+ * ============================================================================ */
 
 /**
  * @brief Get application information
