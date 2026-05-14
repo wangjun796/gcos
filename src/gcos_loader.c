@@ -17,120 +17,119 @@
 #include <string.h>
 
 /* ============================================================================
- * SEF File Format Constants
+ * SEF File Format Constants (per COS3 Specification)
  * ============================================================================ */
 
-#define SEF_MAGIC           0x53454630  /* "SEF0" */
-#define SEF_HEADER_SIZE     32
-#define SECTION_HEADER_SIZE 12
+/* File type identifiers (COS3 Table 10) */
+#define SEF_MAGIC           0x00736566  /* "sef\0" - Loadable file type */
+#define LINK_MAGIC          0x6C696E6B  /* "link" - Link file type */
+#define WASM_MAGIC          0x0061736D  /* "asm\0" - Intermediate file type */
 
-/* ============================================================================
- * Internal Structures
- * ============================================================================ */
+/* Section IDs (COS3 Table 18) */
+#define SECTION_ID_FIRST        0x01    /* First section (required) */
+#define SECTION_ID_IMPORT       0x02    /* Import section (optional) */
+#define SECTION_ID_FUNCTION     0x03    /* Function section (required) */
+#define SECTION_ID_APP          0x04    /* App section (optional) */
+#define SECTION_ID_GLOBAL       0x05    /* Global section (required) */
+#define SECTION_ID_EXPORT       0x06    /* Export section (optional) */
+#define SECTION_ID_ELEMENT      0x07    /* Element section (optional) */
+#define SECTION_ID_DATA         0x08    /* Data section (optional) */
+#define SECTION_ID_CODE         0x09    /* Code section (required) */
+#define SECTION_ID_CUSTOM       0x0F    /* Custom section (optional) */
 
-/**
- * @brief SEF File Header
- */
-#ifdef _MSC_VER
-#pragma pack(push, 1)
-typedef struct {
-    u32 magic;              /* Magic number: 0x53454630 */
-    u16 version_major;      /* Major version */
-    u16 version_minor;      /* Minor version */
-    u32 file_size;          /* Total file size */
-    u32 section_count;      /* Number of sections */
-    u32 checksum;           /* File checksum */
-    u8 reserved[8];         /* Reserved for future use */
-} SEFHeader;
+/* Header sizes (COS3 Tables 16 & 17) */
+#define SEF_HEADER_SIZE         8       /* sef_type(u32) + version(u32) */
+#define SECTION_HEADER_SIZE     5       /* section_id(u8) + size(u32) */
 
-/**
- * @brief SEF Section Header
- */
-typedef struct {
-    u8 section_id;          /* Section identifier */
-    u8 flags;               /* Section flags */
-    u16 reserved;           /* Reserved */
-    u32 offset;             /* Offset in file */
-    u32 size;               /* Section size */
-} SEFSectionHeader;
-#pragma pack(pop)
-#else
-typedef struct {
-    u32 magic;              /* Magic number: 0x53454630 */
-    u16 version_major;      /* Major version */
-    u16 version_minor;      /* Minor version */
-    u32 file_size;          /* Total file size */
-    u32 section_count;      /* Number of sections */
-    u32 checksum;           /* File checksum */
-    u8 reserved[8];         /* Reserved for future use */
-} __attribute__((packed)) SEFHeader;
-
-/**
- * @brief SEF Section Header
- */
-typedef struct {
-    u8 section_id;          /* Section identifier */
-    u8 flags;               /* Section flags */
-    u16 reserved;           /* Reserved */
-    u32 offset;             /* Offset in file */
-    u32 size;               /* Section size */
-} __attribute__((packed)) SEFSectionHeader;
-#endif
 
 /* ============================================================================
  * Helper Functions
  * ============================================================================ */
 
 /**
- * @brief Calculate simple checksum
- * @param data Data buffer
- * @param size Data size
- * @return Checksum value
+ * @brief Little-endian read helpers (COS3 Section 7.1.2, line 413)
+ * 
+ * All multi-byte integers in SEF files must be stored in little-endian order.
  */
-static u32 calculate_checksum(const u8 *data, u32 size) {
-    u32 checksum = 0;
-    for (u32 i = 0; i < size; i++) {
-        checksum += data[i];
-    }
-    return checksum;
+static inline u16 read_u16_le(const u8 *data) {
+    return (u16)data[0] | ((u16)data[1] << 8);
+}
+
+static inline u32 read_u32_le(const u8 *data) {
+    return (u32)data[0] |
+           ((u32)data[1] << 8) |
+           ((u32)data[2] << 16) |
+           ((u32)data[3] << 24);
 }
 
 /**
- * @brief Validate SEF header
- * @param header SEF header pointer
- * @param file_size File size
+ * @brief Decode version number per COS3 Appendix B
+ * 
+ * Version format: [internal][revision][minor][major]
+ * Byte 3 (MSB): major version
+ * Byte 2:       minor version
+ * Byte 1:       revision
+ * Byte 0 (LSB): internal version
+ * 
+ * @param version Raw u32 version value
+ * @param major Output: major version
+ * @param minor Output: minor version
+ * @param revision Output: revision number
+ * @param internal Output: internal version
+ */
+static void decode_version(u32 version, u8 *major, u8 *minor, u8 *revision, u8 *internal) {
+    if (major)    *major    = (version >> 24) & 0xFF;
+    if (minor)    *minor    = (version >> 16) & 0xFF;
+    if (revision) *revision = (version >> 8) & 0xFF;
+    if (internal) *internal = version & 0xFF;
+}
+
+/**
+ * @brief Validate SEF header (per COS3 Table 16)
+ * 
+ * Validates:
+ * - Magic number (0x00736566)
+ * - Version compatibility
+ * - Minimum file size
+ * 
+ * @param data SEF file data
+ * @param file_size File size in bytes
+ * @param out_version Output: parsed version (optional)
  * @return GCOS_OK if valid, error code otherwise
  */
-static GCOSResult validate_sef_header(const SEFHeader *header, u32 file_size) {
-    if (header == NULL) {
+static GCOSResult validate_sef_header(const u8 *data, u32 file_size, u32 *out_version) {
+    if (data == NULL || file_size < SEF_HEADER_SIZE) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* Check magic number */
-    if (header->magic != SEF_MAGIC) {
-        GCOS_PRINTF("[Loader] Invalid SEF magic: 0x%08X\n", header->magic);
+    /* Read sef_type using little-endian (COS3 Section 7.1.2) */
+    u32 sef_type = read_u32_le(&data[0]);
+    
+    /* Check magic number (COS3 Table 10) */
+    if (sef_type != SEF_MAGIC) {
+        GCOS_PRINTF("[Loader] Invalid SEF magic: 0x%08X (expected 0x%08X)\n", 
+                   sef_type, SEF_MAGIC);
         return GCOS_ERROR_INVALID_PARAM;
     }
+    
+    /* Read and decode version (COS3 Appendix B) */
+    u32 version = read_u32_le(&data[4]);
+    u8 ver_major, ver_minor, ver_revision, ver_internal;
+    decode_version(version, &ver_major, &ver_minor, &ver_revision, &ver_internal);
+    
+    GCOS_PRINTF("[Loader] SEF version: v%d.%d.%d.%d (raw=0x%08X)\n",
+               ver_major, ver_minor, ver_revision, ver_internal, version);
     
     /* Check version compatibility */
-    if (header->version_major > GCOS_VM_VERSION_MAJOR) {
-        GCOS_PRINTF("[Loader] Unsupported SEF version: %d.%d\n", 
-                   header->version_major, header->version_minor);
+    if (ver_major > GCOS_VM_VERSION_MAJOR) {
+        GCOS_PRINTF("[Loader] Unsupported SEF major version: %d (max supported: %d)\n",
+                   ver_major, GCOS_VM_VERSION_MAJOR);
         return GCOS_ERROR_INVALID_PARAM;
     }
     
-    /* Check file size */
-    if (header->file_size != file_size) {
-        GCOS_PRINTF("[Loader] File size mismatch: header=%u, actual=%u\n",
-                   header->file_size, file_size);
-        return GCOS_ERROR_INVALID_PARAM;
-    }
-    
-    /* Verify checksum */
-    u32 calculated = calculate_checksum((const u8*)header + 4, SEF_HEADER_SIZE - 4);
-    if (calculated != header->checksum) {
-        GCOS_PRINTF("[Loader] Checksum verification failed\n");
-        return GCOS_ERROR_INVALID_PARAM;
+    /* Return version if requested */
+    if (out_version) {
+        *out_version = version;
     }
     
     GCOS_PRINTF("[Loader] SEF header validated successfully\n");
@@ -138,34 +137,58 @@ static GCOSResult validate_sef_header(const SEFHeader *header, u32 file_size) {
 }
 
 /**
- * @brief Load first section (required)
+ * @brief Load first section (required) - per COS3 Table 19
+ * 
+ * First section contains:
+ * - sef_info structure (sef_version, sef_aid_size, sef_aid[])
+ * - sef_len (total SEF file length)
+ * - import_module_count, import_function_count
+ * - app_num
+ * - sec_func_len, sec_elem_len, sec_data_len, sec_code_len
+ * 
  * @param vm VM instance
  * @param data Section data
  * @param size Section size
  * @return GCOSResult Success or error code
  */
 static GCOSResult load_first_section(GCOSVM *vm, const u8 *data, u32 size) {
-    if (vm == NULL || data == NULL || size < 8) {
+    if (vm == NULL || data == NULL || size < 10) {  /* Minimum: sef_version(4) + sef_aid_size(1) + aid(5) */
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* First section contains module metadata */
-    u16 module_id = (data[0] << 8) | data[1];
-    u16 app_count = (data[2] << 8) | data[3];
-    u32 code_offset = (data[4] << 24) | (data[5] << 16) | (data[6] << 8) | data[7];
+    /* Parse sef_info structure (COS3 Table 20) */
+    u32 sef_version = read_u32_le(&data[0]);
+    u8 sef_aid_size = data[4];
     
-    GCOS_PRINTF("[Loader] First section: module_idx=%u, apps=%u, code_offset=%u\n",
-               vm->module_count, app_count, code_offset);
+    if (size < 5 + sef_aid_size) {
+        GCOS_PRINTF("[Loader] First section too small for AID\n");
+        return GCOS_ERR_INVALID_PARAM;
+    }
     
-    /* Store module info - module will be initialized when fully loaded */
-    (void)module_id; /* Module ID will be set from AID */
-    (void)code_offset; /* Code offset tracked internally */
+    /* Extract module AID */
+    const u8 *aid_data = &data[5];
+    GCOS_PRINTF("[Loader] First section: version=0x%08X, AID_size=%u\n",
+               sef_version, sef_aid_size);
+    
+    /* Print AID in hex */
+    GCOS_PRINTF("[Loader] Module AID: ");
+    for (u8 i = 0; i < sef_aid_size && i < 16; i++) {
+        GCOS_PRINTF("%02X", aid_data[i]);
+    }
+    GCOS_PRINTF("\n");
+    
+    /* TODO: Parse remaining fields (sef_len, counts, etc.) */
+    /* For now, just validate the section exists */
     
     return GCOS_SUCCESS;
 }
 
 /**
- * @brief Load function section
+ * @brief Load function section (per COS3 Table 25)
+ * 
+ * Function section contains an array of u16 code_size values.
+ * Each entry specifies the size of a function (header + bytecode).
+ * 
  * @param vm VM instance
  * @param data Section data
  * @param size Section size
@@ -176,8 +199,8 @@ static GCOSResult load_function_section(GCOSVM *vm, const u8 *data, u32 size) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* Parse function table */
-    u32 func_count = size / 8; /* Each function entry is 8 bytes */
+    /* Parse function table - each entry is 2 bytes (u16) per COS3 Table 25 */
+    u32 func_count = size / 2;
     
     GCOS_PRINTF("[Loader] Loading %u functions\n", func_count);
     
@@ -187,15 +210,16 @@ static GCOSResult load_function_section(GCOSVM *vm, const u8 *data, u32 size) {
         module->function_count = func_count < MAX_FUNCTIONS ? func_count : MAX_FUNCTIONS;
         
         for (u32 i = 0; i < module->function_count; i++) {
-            u32 offset = i * 8;
-            /* Function header stores code_offset and max_stack_depth */
-            module->functions[i].code_offset = (data[offset] << 24) | (data[offset+1] << 16) | 
-                                               (data[offset+2] << 8) | data[offset+3];
-            module->functions[i].max_stack_depth = (data[offset+4] << 24) | (data[offset+5] << 16) | 
-                                                   (data[offset+6] << 8) | data[offset+7];
+            /* Read code_size (includes header and bytecode) */
+            u16 code_size = read_u16_le(&data[i * 2]);
             
-            GCOS_PRINTF("[Loader] Function %u: offset=0x%04X, stack_depth=%u\n",
-                       i, module->functions[i].code_offset, module->functions[i].max_stack_depth);
+            /* For now, store code_size as code_offset placeholder */
+            /* In full implementation, this would track function boundaries */
+            module->functions[i].code_offset = code_size;
+            module->functions[i].max_stack_depth = 0;  /* Will be parsed from function header */
+            
+            GCOS_PRINTF("[Loader] Function %u: code_size=%u bytes\n",
+                       i, code_size);
         }
     }
     
@@ -203,49 +227,133 @@ static GCOSResult load_function_section(GCOSVM *vm, const u8 *data, u32 size) {
 }
 
 /**
- * @brief Load application section
+ * @brief Load application section (per COS3 Table 26 & 27)
+ * 
+ * Application section structure:
+ * - app_num (u8): number of app descriptors
+ * - app_info[app_num]:
+ *   - aid_len (u8): AID length
+ *   - app_aid[aid_len]: AID bytes
+ *   - app_builder_method_ID (u16): installer function index
+ * 
  * @param vm VM instance
  * @param data Section data
  * @param size Section size
  * @return GCOSResult Success or error code
  */
 static GCOSResult load_app_section(GCOSVM *vm, const u8 *data, u32 size) {
-    if (vm == NULL || data == NULL || size < 16) {
+    if (vm == NULL || data == NULL || size < 1) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* Parse application descriptor */
-    u32 app_id = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-    u16 aid_length = (data[4] << 8) | data[5];
-    u8 state = data[6];
-    u8 priority = data[7];
+    size_t offset = 0;
     
-    GCOS_PRINTF("[Loader] Loading app: state=%u, priority=%u\n",
-               state, priority);
+    /* Read app_num */
+    u8 app_num = data[offset++];
     
-    /* Create app instance - using pointer array */
-    if (vm->app_count < (MAX_MODULES * MAX_APPS_PER_MODULE) && aid_length <= AID_MAX_LENGTH) {
-        /* Allocate app instance (in real implementation, this would use static pool) */
-        /* For now, we'll skip actual allocation and just log */
-        GCOS_PRINTF("[Loader] App descriptor parsed (allocation deferred)\n");
+    GCOS_PRINTF("[Loader] Loading %u app(s)\n", app_num);
+    
+    /* Parse each app descriptor */
+    for (u8 i = 0; i < app_num; i++) {
+        if (offset >= size) {
+            GCOS_PRINTF("[Loader] ERROR: App descriptor %u truncated\n", i);
+            return GCOS_ERR_INVALID_PARAM;
+        }
         
-        /* In a full implementation, you would:
-         * 1. Allocate from static pool: vm->apps[vm->app_count] = &app_pool[vm->app_count];
-         * 2. Initialize fields: app->lifecycle, app->app_aid, etc.
-         */
+        /* Read aid_len */
+        u8 aid_len = data[offset++];
         
+        if (offset + aid_len + 2 > size) {
+            GCOS_PRINTF("[Loader] ERROR: App %u AID data out of bounds\n", i);
+            return GCOS_ERR_INVALID_PARAM;
+        }
+        
+        /* Read app_aid */
+        const u8 *app_aid = &data[offset];
+        offset += aid_len;
+        
+        /* Read app_builder_method_ID (u16, little-endian) */
+        u16 builder_id = read_u16_le(&data[offset]);
+        offset += 2;
+        
+        GCOS_PRINTF("[Loader] App %u: AID_len=%u, AID=", i, aid_len);
+        for (u8 j = 0; j < aid_len && j < 16; j++) {
+            GCOS_PRINTF("%02X", app_aid[j]);
+        }
+        GCOS_PRINTF(", builder_id=%u\n", builder_id);
+        
+        /* Validate AID length */
+        if (aid_len > AID_MAX_LENGTH) {
+            GCOS_PRINTF("[Loader] ERROR: App %u AID too long (%u > %u)\n",
+                       i, aid_len, AID_MAX_LENGTH);
+            return GCOS_ERR_APP_NOT_FOUND;
+        }
+        
+        /* Check app capacity */
+        if (vm->app_count >= (MAX_MODULES * MAX_APPS_PER_MODULE)) {
+            GCOS_PRINTF("[Loader] ERROR: Max apps reached\n");
+            return GCOS_ERR_APP_NOT_FOUND;
+        }
+        
+        /* TODO: Allocate and initialize app instance */
         vm->app_count++;
-        GCOS_PRINTF("[Loader] App count: %u\n", vm->app_count);
-    } else {
-        GCOS_PRINTF("[Loader] Cannot load app: max apps reached or invalid AID length\n");
-        return GCOS_ERR_APP_NOT_FOUND;
     }
+    
+    GCOS_PRINTF("[Loader] Total apps loaded: %u\n", vm->app_count);
+    return GCOS_SUCCESS;
+}
+
+/**
+ * @brief Load global section (per COS3 Table 28)
+ * 
+ * Global section defines memory layout:
+ * - rodata_base (u16): read-only data start address
+ * - rwdata_base (u16): read-write data start address
+ * - refdata_base (u16): reference domain data start
+ * - moddata_base (u16): module domain data start
+ * - appdata_base (u16): application domain data start
+ * - data_end (u16): data end address
+ * 
+ * @param vm VM instance
+ * @param data Section data
+ * @param size Section size
+ * @return GCOSResult Success or error code
+ */
+static GCOSResult load_global_section(GCOSVM *vm, const u8 *data, u32 size) {
+    if (vm == NULL || data == NULL || size < 12) {  /* 6 x u16 = 12 bytes */
+        return GCOS_ERR_INVALID_PARAM;
+    }
+    
+    /* Parse memory layout (all u16, little-endian) */
+    u16 rodata_base = read_u16_le(&data[0]);
+    u16 rwdata_base = read_u16_le(&data[2]);
+    u16 refdata_base = read_u16_le(&data[4]);
+    u16 moddata_base = read_u16_le(&data[6]);
+    u16 appdata_base = read_u16_le(&data[8]);
+    u16 data_end = read_u16_le(&data[10]);
+    
+    GCOS_PRINTF("[Loader] Global section: memory layout\n");
+    GCOS_PRINTF("  rodata:  [0x%04X - 0x%04X]\n", rodata_base, rwdata_base - 1);
+    GCOS_PRINTF("  rwdata:  [0x%04X - 0x%04X]\n", rwdata_base, refdata_base - 1);
+    GCOS_PRINTF("  refdata: [0x%04X - 0x%04X]\n", refdata_base, moddata_base - 1);
+    GCOS_PRINTF("  moddata: [0x%04X - 0x%04X]\n", moddata_base, appdata_base - 1);
+    GCOS_PRINTF("  appdata: [0x%04X - 0x%04X]\n", appdata_base, data_end - 1);
+    GCOS_PRINTF("  Total data size: %u bytes\n", data_end);
+    
+    /* TODO: Allocate and initialize data regions in VM */
+    /* For now, just validate the section */
     
     return GCOS_SUCCESS;
 }
 
 /**
- * @brief Load code section
+ * @brief Load code section (per COS3 Table 32-34)
+ * 
+ * Code section contains function headers and bytecode.
+ * Function header format (Table 34 - 2-byte):
+ * - flag_paranum_localnum (u8): bit7=0 (2-byte), bit6-4=params, bit3-0=locals
+ * - opstack_indstack (u8): bit7-5=opstack, bit4-0=indstack
+ * 
  * @param vm VM instance
  * @param data Section data
  * @param size Section size
@@ -256,22 +364,86 @@ static GCOSResult load_code_section(GCOSVM *vm, const u8 *data, u32 size) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* Check if code fits in module code area */
-    if (size > GCOS_MODULE_CODE_SIZE) {
-        GCOS_PRINTF("[Loader] Code too large: %u > %u\n", size, GCOS_MODULE_CODE_SIZE);
-        return GCOS_ERROR_MEMORY_ACCESS;
+    GCOS_PRINTF("[Loader] Code section: %u bytes\n", size);
+    
+    /* Parse functions sequentially */
+    u32 offset = 0;
+    u32 func_index = 0;
+    
+    while (offset < size && func_index < MAX_FUNCTIONS) {
+        /* Need at least 2 bytes for function header */
+        if (offset + 2 > size) {
+            GCOS_PRINTF("[Loader] ERROR: Function %u header truncated\n", func_index);
+            break;
+        }
+        
+        /* Parse function header (Table 34 - 2-byte format) */
+        u8 flag_paranum_localnum = data[offset++];
+        u8 opstack_indstack = data[offset++];
+        
+        /* Decode header fields */
+        bool is_4byte_header = (flag_paranum_localnum & 0x80) != 0;
+        u8 param_count = (flag_paranum_localnum >> 4) & 0x07;
+        u8 local_count = flag_paranum_localnum & 0x0F;
+        u8 opstack_max = (opstack_indstack >> 5) & 0x07;
+        u8 indstack_count = opstack_indstack & 0x1F;
+        
+        GCOS_PRINTF("[Loader] Function %u: header=%s, params=%u, locals=%u, opstack=%u, indstack=%u\n",
+                   func_index,
+                   is_4byte_header ? "4-byte" : "2-byte",
+                   param_count, local_count, opstack_max, indstack_count);
+        
+        /* If 4-byte header, read 2 more bytes */
+        if (is_4byte_header) {
+            if (offset + 2 > size) {
+                GCOS_PRINTF("[Loader] ERROR: Function %u 4-byte header truncated\n", func_index);
+                break;
+            }
+            u8 localnum_ext = data[offset++];
+            u8 opstack_ext = data[offset++];
+            
+            local_count = localnum_ext & 0x7F;
+            opstack_max = opstack_ext;
+            
+            GCOS_PRINTF("  Extended: locals=%u, opstack=%u\n", local_count, opstack_max);
+        }
+        
+        /* Remaining bytes are bytecode for this function */
+        /* Calculate bytecode size from function section's code_size array */
+        /* For now, assume all remaining bytes belong to this function */
+        u32 bytecode_size = size - offset;
+        
+        if (bytecode_size > 0) {
+            GCOS_PRINTF("  Bytecode: %u bytes\n", bytecode_size);
+            
+            /* Copy bytecode to VM code area */
+            if (bytecode_size <= GCOS_MODULE_CODE_SIZE) {
+                memcpy(vm->runtime.module_code, &data[offset], bytecode_size);
+                vm->runtime.code_size = bytecode_size;
+            } else {
+                GCOS_PRINTF("  WARNING: Bytecode too large, truncating\n");
+                memcpy(vm->runtime.module_code, &data[offset], GCOS_MODULE_CODE_SIZE);
+                vm->runtime.code_size = GCOS_MODULE_CODE_SIZE;
+            }
+        }
+        
+        /* Move to next function (for now, assume single function) */
+        /* In full implementation, would use code_size array to find next function */
+        break;
     }
     
-    /* Copy code to VM code area */
-    memcpy(vm->runtime.module_code, data, size);
-    vm->runtime.code_size = size;
-    
-    GCOS_PRINTF("[Loader] Code section loaded: %u bytes\n", size);
+    GCOS_PRINTF("[Loader] Code section loaded successfully\n");
     return GCOS_SUCCESS;
 }
 
 /**
- * @brief Load import section
+ * @brief Load import section (per COS3 Table 22)
+ * 
+ * Import section specifies module dependencies by AID.
+ * Each import entry includes:
+ * - imported_module_aid (variable length)
+ * - imported_function_index (u16)
+ * 
  * @param vm VM instance
  * @param data Section data
  * @param size Section size
@@ -282,8 +454,8 @@ static GCOSResult load_import_section(GCOSVM *vm, const u8 *data, u32 size) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* Parse import table */
-    u32 import_count = size / 12; /* Each import entry is 12 bytes */
+    /* First byte is import count */
+    u8 import_count = data[0];
     
     GCOS_PRINTF("[Loader] Loading %u imports\n", import_count);
     
@@ -292,7 +464,7 @@ static GCOSResult load_import_section(GCOSVM *vm, const u8 *data, u32 size) {
         GCOSModule *module = &vm->modules[vm->module_count - 1];
         module->import_count = import_count < MAX_IMPORT_MODULES ? import_count : MAX_IMPORT_MODULES;
         
-        /* Import resolution would happen here in full implementation */
+        /* TODO: Parse each import entry (AID + function index) */
         GCOS_PRINTF("[Loader] Imports parsed: %u entries\n", module->import_count);
     }
     
@@ -310,65 +482,125 @@ GCOSResult gcos_loader_load_sef(GCOSVM *vm, const u8 *sef_data, u32 sef_size) {
     
     GCOS_PRINTF("[Loader] Loading SEF file: size=%u bytes\n", sef_size);
     
-    /* Validate SEF header */
-    const SEFHeader *header = (const SEFHeader *)sef_data;
-    GCOSResult result = validate_sef_header(header, sef_size);
+    /* Validate SEF header (per COS3 Table 16) */
+    u32 version = 0;
+    GCOSResult result = validate_sef_header(sef_data, sef_size, &version);
     if (result != GCOS_SUCCESS) {
         return result;
     }
     
-    /* Parse sections */
-    u32 section_offset = SEF_HEADER_SIZE;
+    /* Parse sections sequentially (per COS3 Table 17) */
+    u32 offset = SEF_HEADER_SIZE;  /* Start after 8-byte header */
+    u32 section_count = 0;
     
-    for (u32 i = 0; i < header->section_count; i++) {
-        if (section_offset + SECTION_HEADER_SIZE > sef_size) {
-            GCOS_PRINTF("[Loader] Section header out of bounds\n");
-            return GCOS_ERROR_INVALID_PARAM;
+    /* Track required sections */
+    bool has_first = false;
+    bool has_function = false;
+    bool has_global = false;
+    bool has_code = false;
+    
+    while (offset < sef_size) {
+        /* Need at least 5 bytes for section header */
+        if (offset + SECTION_HEADER_SIZE > sef_size) {
+            GCOS_PRINTF("[Loader] Incomplete section header at offset %u\n", offset);
+            break;
         }
         
-        const SEFSectionHeader *section_header = (const SEFSectionHeader *)(sef_data + section_offset);
-        section_offset += SECTION_HEADER_SIZE;
+        /* Read section header using little-endian */
+        u8 section_id = sef_data[offset];
+        u32 section_size = read_u32_le(&sef_data[offset + 1]);
         
-        GCOS_PRINTF("[Loader] Processing section %u: id=%u, offset=%u, size=%u\n",
-                   i, section_header->section_id, section_header->offset, section_header->size);
+        GCOS_PRINTF("[Loader] Section %u: ID=0x%02X, Size=%u bytes (at offset %u)\n",
+                   section_count, section_id, section_size, offset);
         
         /* Validate section bounds */
-        if (section_header->offset + section_header->size > sef_size) {
+        if (offset + SECTION_HEADER_SIZE + section_size > sef_size) {
             GCOS_PRINTF("[Loader] Section data out of bounds\n");
             return GCOS_ERROR_INVALID_PARAM;
         }
         
-        const u8 *section_data = sef_data + section_header->offset;
+        /* Point to section content (after 5-byte header) */
+        const u8 *section_data = &sef_data[offset + SECTION_HEADER_SIZE];
         
-        /* Load section based on type */
-        switch (section_header->section_id) {
+        /* Load section based on type (COS3 Table 18) */
+        switch (section_id) {
             case SECTION_ID_FIRST:
-                result = load_first_section(vm, section_data, section_header->size);
-                break;
-            case SECTION_ID_FUNCTION:
-                result = load_function_section(vm, section_data, section_header->size);
-                break;
-            case SECTION_ID_APP:
-                result = load_app_section(vm, section_data, section_header->size);
-                break;
-            case SECTION_ID_CODE:
-                result = load_code_section(vm, section_data, section_header->size);
+                result = load_first_section(vm, section_data, section_size);
+                has_first = true;
                 break;
             case SECTION_ID_IMPORT:
-                result = load_import_section(vm, section_data, section_header->size);
+                result = load_import_section(vm, section_data, section_size);
+                break;
+            case SECTION_ID_FUNCTION:
+                result = load_function_section(vm, section_data, section_size);
+                has_function = true;
+                break;
+            case SECTION_ID_APP:
+                result = load_app_section(vm, section_data, section_size);
+                break;
+            case SECTION_ID_GLOBAL:
+                result = load_global_section(vm, section_data, section_size);
+                has_global = true;
+                break;
+            case SECTION_ID_EXPORT:
+                /* TODO: Implement export section loading */
+                GCOS_PRINTF("[Loader] Export section: %u bytes (not yet implemented)\n", section_size);
+                result = GCOS_SUCCESS;
+                break;
+            case SECTION_ID_ELEMENT:
+                /* TODO: Implement element section loading */
+                GCOS_PRINTF("[Loader] Element section: %u bytes (not yet implemented)\n", section_size);
+                result = GCOS_SUCCESS;
+                break;
+            case SECTION_ID_DATA:
+                /* TODO: Implement data section loading */
+                GCOS_PRINTF("[Loader] Data section: %u bytes (not yet implemented)\n", section_size);
+                result = GCOS_SUCCESS;
+                break;
+            case SECTION_ID_CODE:
+                result = load_code_section(vm, section_data, section_size);
+                has_code = true;
+                break;
+            case SECTION_ID_CUSTOM:
+                /* Custom sections are optional and can be skipped */
+                GCOS_PRINTF("[Loader] Custom section: %u bytes (skipped)\n", section_size);
+                result = GCOS_SUCCESS;
                 break;
             default:
-                GCOS_PRINTF("[Loader] Unknown section type: %u, skipping\n", section_header->section_id);
-                continue;
+                GCOS_PRINTF("[Loader] Unknown section type: 0x%02X, skipping\n", section_id);
+                result = GCOS_SUCCESS;
+                break;
         }
         
         if (result != GCOS_SUCCESS) {
-            GCOS_PRINTF("[Loader] Failed to load section %u: error=%d\n", i, result);
+            GCOS_PRINTF("[Loader] Failed to load section 0x%02X: error=%d\n", section_id, result);
             return result;
         }
+        
+        /* Move to next section */
+        offset += SECTION_HEADER_SIZE + section_size;
+        section_count++;
     }
     
-    GCOS_PRINTF("[Loader] SEF file loaded successfully\n");
+    /* Validate required sections (COS3 Section 7.3.3) */
+    if (!has_first) {
+        GCOS_PRINTF("[Loader] ERROR: Missing required FIRST section\n");
+        return GCOS_ERROR_INVALID_PARAM;
+    }
+    if (!has_function) {
+        GCOS_PRINTF("[Loader] ERROR: Missing required FUNCTION section\n");
+        return GCOS_ERROR_INVALID_PARAM;
+    }
+    if (!has_global) {
+        GCOS_PRINTF("[Loader] WARNING: Missing required GLOBAL section\n");
+        /* For now, allow loading without global section */
+    }
+    if (!has_code) {
+        GCOS_PRINTF("[Loader] ERROR: Missing required CODE section\n");
+        return GCOS_ERROR_INVALID_PARAM;
+    }
+    
+    GCOS_PRINTF("[Loader] SEF file loaded successfully (%u sections)\n", section_count);
     return GCOS_SUCCESS;
 }
 

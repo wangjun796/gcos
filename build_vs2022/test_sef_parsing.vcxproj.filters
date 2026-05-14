@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\tests\test_sef_parsing.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\views\gcos\prog\cos\gcos_vm\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{3CD085FF-1C38-3573-A2CD-54E8364D66AC}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -198,6 +198,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{EA517FA4-390F-3B79-A9D9-A68187ED718B}</Project>
       <Name>gcos_demo</Name>
     </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\generate_test_sef.vcxproj">
+      <Project>{D249EFDD-98B4-3865-82CB-38F13F49D9BF}</Project>
+      <Name>generate_test_sef</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_aid_prefix_match.vcxproj">
       <Project>{B04C8E4E-C9CD-3027-B1F7-75B3AE221048}</Project>
       <Name>test_aid_prefix_match</Name>
@@ -218,6 +222,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{A1C3F789-BA14-3450-84FF-9C584507F16E}</Project>
       <Name>test_gcos_vm_simple</Name>
     </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_generated_sef.vcxproj">
+      <Project>{A9EB5402-6AE3-35EC-9FF7-F4FF1F642E41}</Project>
+      <Name>test_generated_sef</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_jcshell_client.vcxproj">
       <Project>{983DE19E-AB14-332F-8390-491B5305A0E4}</Project>
       <Name>test_jcshell_client</Name>
@@ -234,9 +242,17 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{E8A01FC8-ADC7-37D4-84BF-F03D1462C442}</Project>
       <Name>test_persistence</Name>
     </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_sef_parsing.vcxproj">
+      <Project>{AEAB875F-E341-3737-9771-75EC3D6F6B34}</Project>
+      <Name>test_sef_parsing</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_select_command.vcxproj">
       <Project>{CD3870C5-DACF-3CF5-9880-C581BC032434}</Project>
       <Name>test_select_command</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_symbol_resolver.vcxproj">
+      <Project>{75B54575-EA35-3257-B168-9AA82DA6FFD7}</Project>
+      <Name>test_symbol_resolver</Name>
     </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_tlp224.vcxproj">
       <Project>{57EC60A4-FB5E-328D-937C-E07625442D1B}</Project>

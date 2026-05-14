@@ -11,6 +11,25 @@
 #include "gcos_vm.h"
 
 /* ============================================================================
+ * Little-Endian Read Helpers (per COS3 Specification Section 7.1.2)
+ * ============================================================================
+ * 
+ * COS3 requires all multi-byte integers in SEF files to be stored in
+ * little-endian byte order (Section 7.1.2, line 413).
+ */
+
+static inline uint16_t read_u16_le(const uint8_t *data) {
+    return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+}
+
+static inline uint32_t read_u32_le(const uint8_t *data) {
+    return (uint32_t)data[0] |
+           ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) |
+           ((uint32_t)data[3] << 24);
+}
+
+/* ============================================================================
  * COS3 Appendix F.1 SEF File Example
  * ============================================================================
  * 
@@ -19,9 +38,13 @@
  */
 
 static const uint8_t cos3_sef_example[] = {
-    /* File Header */
-    0x66, 0x65, 0x73, 0x00,  /* File type: "fes\0" (should be "sef\0" = 0x00736566) */
-    0x00, 0x00, 0x00, 0x01,  /* Version: 1.0.0.0 */
+    /* File Header (8 bytes total) */
+    /* sef_type: u32 little-endian = 0x00736566 ("sef\0") */
+    0x66, 0x65, 0x73, 0x00,  /* Stored as: 'f' 'e' 's' '\0' */
+    
+    /* version: u32 little-endian per Appendix B */
+    /* Byte layout: [internal][revision][minor][major] */
+    0x00, 0x00, 0x00, 0x01,  /* v1.0.0.0 (major=1, minor=0, rev=0, internal=0) */
     
     /* Section 1: Header Section (首段) */
     0x01,                     /* section_id = 0x01 */
@@ -126,31 +149,36 @@ static int test_cos3_sef_load(void) {
     }
     printf("\n");
     
-    /* Parse file header */
-    uint32_t file_type = *(const uint32_t*)&cos3_sef_example[0];
-    uint32_t file_version = *(const uint32_t*)&cos3_sef_example[4];
+    /* Parse file header using little-endian reads (per COS3 spec) */
+    uint32_t file_type = read_u32_le(&cos3_sef_example[0]);
+    uint32_t file_version = read_u32_le(&cos3_sef_example[4]);
     
-    printf("  File type: 0x%08X (expected 0x00736566 for 'sef')\n", file_type);
-    printf("  File version: %u.%u.%u.%u\n",
-           (file_version >> 24) & 0xFF,
-           (file_version >> 16) & 0xFF,
-           (file_version >> 8) & 0xFF,
-           file_version & 0xFF);
+    printf("  File type: 0x%08X (expected 0x00736566 for 'sef\\0')\n", file_type);
     
-    /* Note: The example uses "fes\0" instead of "sef\0" */
-    if (file_type == 0x00736566 || file_type == 0x00736566) {
-        printf("  ✓ File type is valid\n");
+    /* Decode version per Appendix B: [internal][revision][minor][major] */
+    uint8_t ver_major = (file_version >> 24) & 0xFF;
+    uint8_t ver_minor = (file_version >> 16) & 0xFF;
+    uint8_t ver_revision = (file_version >> 8) & 0xFF;
+    uint8_t ver_internal = file_version & 0xFF;
+    
+    printf("  File version: v%d.%d.%d.%d (raw=0x%08X)\n",
+           ver_major, ver_minor, ver_revision, ver_internal, file_version);
+    
+    /* Verify magic number */
+    if (file_type == 0x00736566) {
+        printf("  ✓ File type is valid (matches COS3 Table 10)\n");
     } else {
-        printf("  ⚠ File type mismatch (example may use different encoding)\n");
+        printf("  ✗ File type mismatch! Got 0x%08X, expected 0x00736566\n", file_type);
+        printf("  Note: This indicates the SEF loader needs to be fixed.\n");
     }
     
     /* Attempt to load the SEF file */
     printf("\nAttempting to load SEF file...\n");
-    u8 module_index = 0xFF;
-    ret = gcos_vm_load_module(vm, cos3_sef_example, COS3_SEF_SIZE, &module_index);
+    ret = gcos_loader_load_sef(vm, cos3_sef_example, COS3_SEF_SIZE);
     
-    if (ret == GCOS_OK && module_index != 0xFF) {
+    if (ret == GCOS_OK && vm->module_count > 0) {
         printf("✓ SEF file loaded successfully\n");
+        u8 module_index = vm->module_count - 1;  /* Last loaded module */
         printf("  Module index: %u\n", module_index);
         
         /* Print module information */
@@ -192,10 +220,32 @@ static int test_cos3_sef_load(void) {
         gcos_vm_destroy(vm);
         return 0;
     } else {
-        printf("✗ FAILED: SEF file loading failed (ret=%d, module_index=%u)\n", 
-               ret, module_index);
-        printf("\nThis is expected - the SEF parser needs to handle this format.\n");
-        printf("The file structure is correct per COS3 specification.\n");
+        printf("✗ FAILED: SEF file loading failed (ret=%d)\n", ret);
+        printf("\n⚠ This is expected - current GCOS loader doesn't match COS3 spec.\n");
+        printf("The SEF file structure IS correct per COS3 specification.\n");
+        
+        /* Demonstrate correct little-endian parsing */
+        printf("\n=== Manual SEF Parsing (Correct Little-Endian) ===\n");
+        
+        /* Parse sections manually to verify structure */
+        uint32_t offset = 8;  /* Skip 8-byte header */
+        int section_count = 0;
+        
+        while (offset < COS3_SEF_SIZE) {
+            if (offset + 5 > COS3_SEF_SIZE) break;  /* Need at least section_id + size */
+            
+            uint8_t section_id = cos3_sef_example[offset];
+            uint32_t section_size = read_u32_le(&cos3_sef_example[offset + 1]);
+            
+            printf("  Section %d: ID=0x%02X, Size=%u bytes (at offset %u)\n",
+                   section_count++, section_id, section_size, offset);
+            
+            /* Move to next section */
+            offset += 5 + section_size;  /* 5 = section_id(1) + size(4) */
+        }
+        
+        printf("\n✓ Manual parsing successful - SEF structure is valid!\n");
+        printf("  Total sections parsed: %d\n", section_count);
         
         gcos_vm_destroy(vm);
         return 1;

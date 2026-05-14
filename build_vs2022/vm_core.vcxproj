@@ -317,6 +317,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_app_manager.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_load_manager.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_persistence.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_symbol_resolver.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_security.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_apdu.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_tlp.c" />

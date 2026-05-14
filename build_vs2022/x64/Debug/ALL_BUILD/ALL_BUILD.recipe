@@ -17,6 +17,9 @@
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\gcos_demo.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\generate_test_sef.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_aid_prefix_match.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
@@ -32,6 +35,9 @@
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_gcos_vm_simple.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_generated_sef.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_jcshell_client.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
@@ -41,7 +47,16 @@
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_load_command.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_persistence.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_sef_parsing.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_select_command.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_symbol_resolver.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_tlp224.exe</FullPath>
