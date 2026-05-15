@@ -8,6 +8,7 @@
 #include "gcos_app_manager.h"
 #include "gcos_apdu.h"  // For status word constants
 #include "gcos_install_manager.h"  // For INSTALL command handler
+#include "gcos_delete_manager.h"   // For DELETE command handler
 #include "gcos_module_registry.h"  // For module registry operations
 #include "gcos_symbol_resolver.h"  // For GRT cleanup
 #include <stdio.h>
@@ -182,6 +183,9 @@ static u16 isd_process(GCOSAppInstance *app,
         
         case 0xE4:  // LOAD
             return isd_handler_load(app, apdu, apdu_len, response, resp_len);
+        
+        case 0xE6:  // DELETE
+            return handle_delete_command(apdu, apdu_len, response, resp_len);
         
         default:
             printf("[ISD] Unsupported GP command: INS=0x%02X\n", ins);
