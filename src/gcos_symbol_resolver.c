@@ -110,7 +110,8 @@ GCOSResult gcos_symbol_resolver_init(GCOSVM *vm) {
     g_symbol_resolver.global_ref_flash_offset = 0;
     
     for (int i = 0; i < MAX_GLOBAL_REFS; i++) {
-        g_symbol_resolver.global_ref_table[i].is_valid = false;
+        /* Initialize all entries as invalid (module_id = 0xFF) */
+        GRT_INVALIDATE(g_symbol_resolver.global_ref_table[i]);
     }
     
     /* Initialize system modules */
@@ -385,12 +386,14 @@ bool gcos_symbol_resolve_address(GCOSVM *vm, u16 compact_addr, u32 *out_logical_
             entry = &g_symbol_resolver.global_ref_table_ext[index - MAX_GLOBAL_REFS];
         }
         
-        if (!entry->is_valid) {
-            GCOS_PRINTF("[Symbol Resolver] ERROR: Invalid global ref entry %u\n", index);
+        /* Check if entry is valid using packed format */
+        if (!GRT_IS_VALID(*entry)) {
+            GCOS_PRINTF("[Symbol Resolver] ERROR: Invalid global ref entry %u (module_id=0xFF)\n", index);
             return false;
         }
         
-        *out_logical_addr = entry->logical_address;
+        /* Extract 24-bit logical address from packed entry */
+        *out_logical_addr = GRT_GET_ADDRESS(*entry);
         return true;
     }
     else {
@@ -406,25 +409,39 @@ u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address,
         return SYMBOL_IDX_INVALID;
     }
     
-    /* Check if table is full - try to expand */
-    if (g_symbol_resolver.global_ref_count >= g_symbol_resolver.global_ref_capacity) {
-        GCOS_PRINTF("[Symbol Resolver] Global ref table FULL (%u/%u). Attempting expansion...\n",
-                   g_symbol_resolver.global_ref_count, g_symbol_resolver.global_ref_capacity);
-        
-        /* Try to expand the table */
-        GCOSResult ret = gcos_symbol_expand_global_ref_table(vm);
-        if (ret != GCOS_SUCCESS) {
-            GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to expand global ref table\n");
-            return SYMBOL_IDX_INVALID;
+    /* Mask address to 24 bits (support up to 16 MB) */
+    u32 masked_address = logical_address & GRT_ADDRESS_MASK;
+    
+    /* 1. Try to find a reusable slot (module_id == 0xFF) */
+    u16 index = gcos_symbol_find_free_slot(vm);
+    
+    if (index == SYMBOL_IDX_INVALID) {
+        /* 2. No free slot, check if we need to expand */
+        if (g_symbol_resolver.global_ref_count >= g_symbol_resolver.global_ref_capacity) {
+            GCOS_PRINTF("[Symbol Resolver] Global ref table FULL (%u/%u). Attempting expansion...\n",
+                       g_symbol_resolver.global_ref_count, g_symbol_resolver.global_ref_capacity);
+            
+            GCOSResult ret = gcos_symbol_expand_global_ref_table(vm);
+            if (ret != GCOS_SUCCESS) {
+                GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to expand global ref table\n");
+                return SYMBOL_IDX_INVALID;
+            }
+            
+            GCOS_PRINTF("[Symbol Resolver] Table expanded successfully. New capacity: %u\n",
+                       g_symbol_resolver.global_ref_capacity);
+            
+            /* Try to find free slot again after expansion */
+            index = gcos_symbol_find_free_slot(vm);
         }
         
-        GCOS_PRINTF("[Symbol Resolver] Table expanded successfully. New capacity: %u\n",
-                   g_symbol_resolver.global_ref_capacity);
+        /* If still no free slot, allocate new entry at the end */
+        if (index == SYMBOL_IDX_INVALID) {
+            index = g_symbol_resolver.global_ref_count;
+            g_symbol_resolver.global_ref_count++;
+        }
     }
     
-    u16 index = g_symbol_resolver.global_ref_count;
-    
-    /* Get entry pointer (base table or extension) */
+    /* 3. Write entry using packed format */
     GCOSGlobalRefEntry *entry;
     if (index < MAX_GLOBAL_REFS) {
         entry = &g_symbol_resolver.global_ref_table[index];
@@ -432,17 +449,44 @@ u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address,
         entry = &g_symbol_resolver.global_ref_table_ext[index - MAX_GLOBAL_REFS];
     }
     
-    entry->logical_address = logical_address;
-    entry->module_id = module_id;
-    entry->symbol_index = symbol_index;
-    entry->is_valid = true;
+    /* Set packed data: high 8 bits = module_id, low 24 bits = address */
+    GRT_SET_ENTRY(*entry, masked_address, module_id);
     
-    g_symbol_resolver.global_ref_count++;
-    
-    /* NOTE: Global ref table changes should be saved via page_cache_write if needed */
-    /* For now, rely on explicit flush calls after module loading */
+    GCOS_PRINTF("[Symbol Resolver] Created global ref %u: mod=%u, addr=0x%06X\n",
+               index, module_id, masked_address);
     
     return make_global_addr(index);
+}
+
+/**
+ * @brief Find a free slot in global reference table (module_id == 0xFF)
+ * @param vm VM instance
+ * @return Slot index, or SYMBOL_IDX_INVALID if no free slot
+ */
+u16 gcos_symbol_find_free_slot(GCOSVM *vm) {
+    if (!g_resolver_initialized) {
+        return SYMBOL_IDX_INVALID;
+    }
+    
+    /* Search for invalid entry (module_id == 0xFF) */
+    for (u16 i = 0; i < g_symbol_resolver.global_ref_capacity; i++) {
+        GCOSGlobalRefEntry *entry;
+        if (i < MAX_GLOBAL_REFS) {
+            entry = &g_symbol_resolver.global_ref_table[i];
+        } else {
+            if (g_symbol_resolver.global_ref_table_ext == NULL) {
+                break;
+            }
+            entry = &g_symbol_resolver.global_ref_table_ext[i - MAX_GLOBAL_REFS];
+        }
+        
+        if (!GRT_IS_VALID(*entry)) {
+            GCOS_PRINTF("[Symbol Resolver] Found free slot at index %u\n", i);
+            return i;
+        }
+    }
+    
+    return SYMBOL_IDX_INVALID;  /* No free slot */
 }
 
 int gcos_symbol_find_system_module(GCOSVM *vm, const u8 *aid, u8 aid_length) {
@@ -572,10 +616,10 @@ void gcos_symbol_dump_tables(GCOSVM *vm, u8 module_id) {
                (unsigned int)(MAX_GLOBAL_REFS * sizeof(GCOSGlobalRefEntry)));
     for (u16 i = 0; i < g_symbol_resolver.global_ref_count; i++) {
         GCOSGlobalRefEntry *entry = &g_symbol_resolver.global_ref_table[i];
-        if (entry->is_valid) {
-            GCOS_PRINTF("  [%u] 0x%04X -> 0x%08X (mod=%u, sym=%u)\n",
-                       i, make_global_addr(i), entry->logical_address,
-                       entry->module_id, entry->symbol_index);
+        if (GRT_IS_VALID(*entry)) {
+            GCOS_PRINTF("  [%u] 0x%04X -> 0x%06X (mod=%u)\n",
+                       i, make_global_addr(i), GRT_GET_ADDRESS(*entry),
+                       GRT_GET_MODULE_ID(*entry));
         }
     }
     
@@ -637,7 +681,7 @@ GCOSResult gcos_symbol_expand_global_ref_table(GCOSVM *vm) {
         
         /* Initialize extension table */
         for (u16 i = 0; i < (MAX_GLOBAL_REFS_MAX - MAX_GLOBAL_REFS); i++) {
-            static_ext_table[i].is_valid = false;
+            GRT_INVALIDATE(static_ext_table[i]);
         }
     }
     
@@ -823,7 +867,7 @@ GCOSResult gcos_symbol_load_global_ref_table_from_flash(GCOSVM *vm) {
             
             /* Initialize */
             for (u16 i = 0; i < (MAX_GLOBAL_REFS_MAX - MAX_GLOBAL_REFS); i++) {
-                static_ext_table[i].is_valid = false;
+                GRT_INVALIDATE(static_ext_table[i]);
             }
         }
         
@@ -1082,4 +1126,68 @@ GCOSResult gcos_symbol_flush_write_buffer(GCOSVM *vm) {
     }
     
     return GCOS_SUCCESS;
+}
+
+/* ============================================================================
+ * Global Reference Table Recycling (inspired by cref GRT)
+ * ============================================================================ */
+
+/**
+ * @brief Delete all global references owned by a module (batch soft delete)
+ * 
+ * This function implements cref's removeReferencesFromPackage() mechanism:
+ * - Traverses all GRT entries
+ * - Marks entries with matching module_id as invalid (module_id = 0xFF)
+ * - Slots can be reused by future addReference() calls
+ * 
+ * @param vm VM instance
+ * @param module_id Module ID to delete
+ */
+void gcos_symbol_delete_module_global_refs(GCOSVM *vm, u8 module_id) {
+    if (!g_resolver_initialized) {
+        return;
+    }
+    
+    int recycled_count = 0;
+    
+    /* Traverse all entries in base table */
+    for (u16 i = 0; i < MAX_GLOBAL_REFS; i++) {
+        GCOSGlobalRefEntry *entry = &g_symbol_resolver.global_ref_table[i];
+        
+        /* Check if entry belongs to the module being deleted */
+        if (GRT_IS_VALID(*entry) && GRT_GET_MODULE_ID(*entry) == module_id) {
+            /* Soft delete: set module_id to 0xFF */
+            GRT_INVALIDATE(*entry);
+            recycled_count++;
+            
+            GCOS_PRINTF("[Symbol Resolver] Recycled global ref %u (was mod=%u)\n",
+                       i, module_id);
+        }
+    }
+    
+    /* Traverse extension table if exists */
+    if (g_symbol_resolver.global_ref_table_ext != NULL) {
+        u16 ext_count = g_symbol_resolver.global_ref_capacity - MAX_GLOBAL_REFS;
+        for (u16 i = 0; i < ext_count; i++) {
+            GCOSGlobalRefEntry *entry = &g_symbol_resolver.global_ref_table_ext[i];
+            
+            if (GRT_IS_VALID(*entry) && GRT_GET_MODULE_ID(*entry) == module_id) {
+                GRT_INVALIDATE(*entry);
+                recycled_count++;
+                
+                GCOS_PRINTF("[Symbol Resolver] Recycled global ref %u (ext, was mod=%u)\n",
+                           i + MAX_GLOBAL_REFS, module_id);
+            }
+        }
+    }
+    
+    if (recycled_count > 0) {
+        GCOS_PRINTF("[Symbol Resolver] Recycled %d global refs for module %u\n",
+                   recycled_count, module_id);
+        
+        /* Save to Flash to persist the changes */
+        gcos_symbol_save_global_ref_table_to_flash(vm);
+    } else {
+        GCOS_PRINTF("[Symbol Resolver] No global refs to recycle for module %u\n", module_id);
+    }
 }

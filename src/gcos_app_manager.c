@@ -327,7 +327,11 @@ GCOSResult app_register_ex(GCOSVM *vm,
     // Set application information
     memcpy(&app->app_aid, app_aid, sizeof(GCOSAID));
     app->app_id = new_app_id;
-    app->module_index = module_index;
+    
+    /* ⭐ 改进：使用 module_id 和 module 指针 */
+    app->module_id = (u8)module_index;  // Cast u16 to u8 for module_id
+    app->module = NULL;  // Will be set when module is loaded
+    
     app->lifecycle = APPLICATION_INSTALLED;
     
     // ⭐ Set type, security domain, and privileges

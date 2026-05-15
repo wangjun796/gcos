@@ -92,24 +92,46 @@ typedef struct {
 } GCOSImportSymbol;
 
 /**
- * @brief Global reference table entry (compact format for Flash storage)
- * Maps 16-bit global reference index to 32-bit logical address
+ * @brief Global reference table entry (optimized compact format, inspired by cref GRT)
  * 
- * Memory layout (12 bytes per entry):
- * - logical_address: 4 bytes (u32)
- * - module_id: 1 byte (u8)
- * - symbol_index: 2 bytes (u16)
- * - is_valid: 1 byte (bool, padded)
+ * Memory layout (4 bytes per entry, packed into u32):
+ * - Bits 31-24: Module ID (8 bits, 0xFF = invalid/recycled)
+ * - Bits 23-0:  Logical Address (24 bits, supports up to 16 MB addressing)
  * 
- * Total table size: MAX_GLOBAL_REFS × 12 bytes = 768 bytes (for 64 entries)
+ * This design is inspired by cref's Global Reference Table (GRT):
+ * - Minimal size: only 4 bytes per entry
+ * - Fast access: single u32 read gets both module_id and address
+ * - Easy recycling: set module_id to 0xFF to mark as invalid
+ * - Slot reuse: find_free_slot() searches for module_id == 0xFF
+ * 
+ * Total table size: MAX_GLOBAL_REFS × 4 bytes = 256 bytes (for 64 entries)
+ * Maximum table size: MAX_GLOBAL_REFS_MAX × 4 bytes = 1,024 bytes (for 256 entries)
  * This MUST fit in RAM and be persistable to Flash.
  */
 typedef struct {
-    u32 logical_address;        /* 32-bit logical address */
-    u8 module_id;               /* Module that owns this symbol */
-    u16 symbol_index;           /* Symbol index within module */
-    bool is_valid;              /* Whether entry is valid */
+    u32 packed_data;  /* High 8 bits = module_id, Low 24 bits = logical_address */
 } GCOSGlobalRefEntry;
+
+/* Accessor macros for packed GRT entry */
+#define GRT_MODULE_ID_MASK      0xFF000000U  /* Bits 31-24 */
+#define GRT_ADDRESS_MASK        0x00FFFFFFU  /* Bits 23-0 */
+#define GRT_MODULE_ID_INVALID   0xFF         /* Invalid module ID marker */
+
+/* Get module_id from packed entry */
+#define GRT_GET_MODULE_ID(entry)    ((u8)(((entry).packed_data & GRT_MODULE_ID_MASK) >> 24))
+
+/* Get logical_address from packed entry */
+#define GRT_GET_ADDRESS(entry)      ((u32)((entry).packed_data & GRT_ADDRESS_MASK))
+
+/* Set packed entry from module_id and logical_address */
+#define GRT_SET_ENTRY(entry, addr, mod) \
+    ((entry).packed_data = (((u32)(mod) << 24) | ((addr) & GRT_ADDRESS_MASK)))
+
+/* Check if entry is valid */
+#define GRT_IS_VALID(entry)     (GRT_GET_MODULE_ID(entry) != GRT_MODULE_ID_INVALID)
+
+/* Invalidate entry (soft delete) */
+#define GRT_INVALIDATE(entry)   ((entry).packed_data = ((u32)GRT_MODULE_ID_INVALID << 24))
 
 /**
  * @brief System module registration
@@ -249,21 +271,30 @@ GCOSResult gcos_symbol_add_import(GCOSVM *vm, u8 module_id, u16 module_idx_func_
 bool gcos_symbol_resolve_address(GCOSVM *vm, u16 compact_addr, u32 *out_logical_addr);
 
 /**
- * @brief Create global reference entry
- * Allocates entry in static global reference table
+ * @brief Create global reference entry (inspired by cref GRT)
  * 
- * IMPORTANT: This function will fail if table is full (MAX_GLOBAL_REFS reached).
- * For smart card environment, table size is fixed and cannot be expanded.
- * Plan your module design to stay within the limit.
+ * Creates a new global reference or reuses an invalid slot.
+ * The entry stores module_id (8 bits) and logical_address (24 bits) in packed format.
  * 
  * @param vm VM instance
- * @param logical_address 32-bit logical address
- * @param module_id Owning module ID
- * @param symbol_index Symbol index
- * @return 16-bit global reference address (with bit 15 set), or SYMBOL_IDX_INVALID if table full
+ * @param logical_address 32-bit logical address (will be masked to 24 bits, supports 16 MB)
+ * @param module_id Module ID that owns this reference (0xFF = invalid)
+ * @param symbol_index Symbol index within module (currently unused, kept for API compatibility)
+ * @return 16-bit compact address (with bit 15 set), or SYMBOL_IDX_INVALID on error
  */
 u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address, 
                                    u8 module_id, u16 symbol_index);
+
+/**
+ * @brief Find a free slot in global reference table (module_id == 0xFF)
+ * 
+ * Searches for an invalid entry that can be reused.
+ * This implements cref's slot reuse mechanism.
+ * 
+ * @param vm VM instance
+ * @return Slot index, or SYMBOL_IDX_INVALID if no free slot
+ */
+u16 gcos_symbol_find_free_slot(GCOSVM *vm);
 
 /**
  * @brief Find system module by AID
@@ -405,6 +436,21 @@ GCOSResult gcos_symbol_page_cache_invalidate(GCOSVM *vm, u32 lpn);
  * @return true if page is in cache
  */
 bool gcos_symbol_page_cache_contains(GCOSVM *vm, u32 lpn);
+
+/**
+ * @brief Delete all global references owned by a module (batch soft delete)
+ * 
+ * This function implements cref's removeReferencesFromPackage() mechanism:
+ * - Traverses all GRT entries
+ * - Marks entries with matching module_id as invalid (module_id = 0xFF)
+ * - Slots can be reused by future create_global_ref() calls
+ * 
+ * Call this function before deleting a module to recycle its global references.
+ * 
+ * @param vm VM instance
+ * @param module_id Module ID to delete
+ */
+void gcos_symbol_delete_module_global_refs(GCOSVM *vm, u8 module_id);
 
 /**
  * @brief Dump symbol tables for debugging

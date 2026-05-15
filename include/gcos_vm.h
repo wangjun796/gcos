@@ -415,6 +415,49 @@ typedef struct {
 } GCOSImportInfo;
 
 /**
+ * @brief Module registry entry (code layer, shared by multiple apps)
+ * 
+ * Similar to cref's Package Entry.
+ * Stores module code and metadata, loaded once from Flash.
+ * Multiple app instances can share the same module code.
+ */
+typedef struct GCOSModuleRegistry {
+    u8 module_id;                   /* Module ID (0xFF = invalid) */
+    bool is_loaded;                 /* Whether module is loaded */
+    
+    /* Module identity */
+    GCOSAID module_aid;             /* Module AID */
+    u32 module_version;             /* Module version */
+    
+    /* Code location (XIP or loaded to RAM) */
+    const u8 *code_base;            /* Code section base address */
+    u32 code_size;                  /* Code size in bytes */
+    
+    /* Function table */
+    u16 function_count;             /* Number of functions */
+    const void *functions;          /* Function headers (type depends on implementation) */
+    
+    /* Export table */
+    u16 export_count;               /* Number of exported symbols */
+    void *exports;                  /* Export symbol table */
+    
+    /* Import dependencies */
+    u8 import_count;                /* Number of imports */
+    GCOSImportInfo imports[MAX_IMPORTS]; /* Import dependencies */
+    
+    /* Instance tracking */
+    u8 instance_count;              /* Number of app instances using this module */
+    u8 instance_ids[MAX_APPS_PER_MODULE]; /* Array of app IDs using this module */
+    
+    /* Global data template (copied to each instance) */
+    const u8 *global_data_template; /* Read-only template */
+    u32 global_data_size;           /* Template size */
+    
+    /* Module state */
+    GCOSModuleState state;          /* LOADED/VERIFIED/ERROR */
+} GCOSModuleRegistry;
+
+/**
  * @brief Section types as per COS3 Specification Table 18
  */
 typedef enum {
@@ -763,7 +806,11 @@ struct GCOSAppInstance {
     /* === 基本信息 === */
     GCOSAID app_aid;                /* 应用AID */
     u8 app_id;                      /* 应用 ID (0 = ISD) */
-    u16 module_index;               /* 所属模块索引 */
+    
+    /* ⭐ 改进：指向模块注册表，支持多实例共享代码 */
+    u8 module_id;                   /* Module ID (references GCOSModuleRegistry) */
+    struct GCOSModuleRegistry *module; /* Pointer to module registry entry */
+    
     GCOSAppLifecycleState lifecycle;/* 生命周期状态 */
     
     /* === 新增：类型、权限和安全域 ⭐ === */
@@ -967,9 +1014,13 @@ struct GCOSVM {
     } security;
     
     /* 模块管理 */
-    GCOSModule modules[MAX_MODULES];/* 模块数组 */
+    GCOSModule modules[MAX_MODULES];/* 模块数组 (legacy, kept for compatibility) */
     u8 module_count;                /* 已加载模块数 */
     u8 current_module_index;        /* 当前模块索引 */
+    
+    /* ⭐ NEW: Module registry (code layer, shared by multiple apps) */
+    GCOSModuleRegistry module_registry[MAX_MODULES]; /* Module registry entries */
+    u8 registry_count;              /* Number of registered modules */
     
     /* ⭐ NEW: LOAD command context (for multi-APDU loading) */
     GCOSLoadContext load_context;   /* LOAD state machine context */
