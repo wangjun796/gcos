@@ -7,6 +7,7 @@
 
 #include "gcos_app_manager.h"
 #include "gcos_apdu.h"  // For status word constants
+#include "gcos_install_manager.h"  // For INSTALL command handler
 #include <stdio.h>
 #include <string.h>
 
@@ -173,6 +174,9 @@ static u16 isd_process(GCOSAppInstance *app,
     switch (ins) {
         case 0xA4:  // SELECT
             return isd_handler_select(app, apdu, apdu_len, response, resp_len);
+        
+        case 0xE2:  // INSTALL
+            return handle_install_command(apdu, apdu_len, response, resp_len);
         
         case 0xE4:  // LOAD
             return isd_handler_load(app, apdu, apdu_len, response, resp_len);

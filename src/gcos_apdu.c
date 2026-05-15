@@ -22,9 +22,9 @@ bool is_gp_management_command(u8 cla, u8 ins) {
         case 0x82:  // EXTERNAL AUTHENTICATE
         case 0xCA:  // GET DATA (specific tags)
         case 0xDA:  // PUT DATA (specific tags)
-        case 0xE2:  // DELETE
-        case 0xE4:  // LOAD
-        case 0xE6:  // INSTALL
+        case 0xE2:  // INSTALL ⭐ (create app instance from module)
+        case 0xE4:  // LOAD (load module code)
+        case 0xE6:  // DELETE (delete app/module)
         case 0xF2:  // GET STATUS
             return true;
         default:
