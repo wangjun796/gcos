@@ -8,6 +8,8 @@
 #include "gcos_app_manager.h"
 #include "gcos_apdu.h"  // For status word constants
 #include "gcos_install_manager.h"  // For INSTALL command handler
+#include "gcos_module_registry.h"  // For module registry operations
+#include "gcos_symbol_resolver.h"  // For GRT cleanup
 #include <stdio.h>
 #include <string.h>
 
@@ -533,17 +535,41 @@ GCOSResult app_delete(GCOSVM *vm, u8 app_id) {
         return GCOS_ERROR_CANNOT_DELETE_ISD;
     }
     
-    // Deselect if currently selected
+    printf("[APP_DELETE] Deleting application %u...\n", app_id);
+    
+    // Step 1: Deselect if currently selected
     if (vm->selected_app == app) {
         app_deselect(vm, vm->current_channel);
     }
     
-    // Clear application slot
+    // Step 2: Remove from module registry instance tracking
+    if (app->module != NULL && app->module->is_loaded) {
+        u8 module_id = app->module->module_id;
+        printf("[APP_DELETE] Removing from module %u instance tracking...\n", module_id);
+        
+        GCOSResult result = module_registry_remove_instance(vm, module_id, app_id);
+        if (result != GCOS_SUCCESS) {
+            printf("[APP_DELETE] WARNING: Failed to remove from module registry: %d\n", result);
+        } else {
+            printf("[APP_DELETE] Module %u now has %u instances\n",
+                   module_id,
+                   module_registry_get_instance_count(vm, module_id));
+        }
+    }
+    
+    // Step 3: Clean up global reference table entries for this app's module
+    if (app->module_id != 0xFF && app->module_id < MAX_MODULES) {
+        printf("[APP_DELETE] Cleaning up GRT entries for module %u...\n", app->module_id);
+        gcos_symbol_delete_module_global_refs(vm, app->module_id);
+    }
+    
+    // Step 4: Clear application slot
     memset(app, 0, sizeof(GCOSAppInstance));
     
     vm->app_count--;
     
-    printf("[APP_DELETE] Application %u deleted\n", app_id);
+    printf("[APP_DELETE] Application %u deleted successfully. Total apps: %u\n",
+           app_id, vm->app_count);
     
     return GCOS_SUCCESS;
 }
