@@ -43,9 +43,23 @@
 #define MAX_GLOBAL_REFS_MAX     256     /* Absolute maximum after expansion */
 #define GLOBAL_REF_GROWTH_STEP  32      /* Expansion step size */
 
+/* Write buffer configuration for Flash optimization */
+#define GLOBAL_REF_WRITE_BUFFER_PAGES   4       /* Number of cacheable pages */
+#define USER_DATA_SIZE                  464     /* eflash user data size per page */
+#define GLOBAL_REF_WRITE_BUFFER_SIZE    (GLOBAL_REF_WRITE_BUFFER_PAGES * USER_DATA_SIZE)  /* 1,856 bytes */
+
+/* Page cache entry structure */
+typedef struct {
+    u32 lpn;                    /* Logical Page Number (0xFFFFFFFF = invalid/empty) */
+    u8 data[USER_DATA_SIZE];    /* Cached page data (464 bytes) */
+    bool dirty;                 /* Has unsaved changes */
+    bool valid;                 /* Slot is in use */
+} GCOSPageCacheEntry;
+
 /* Note: GCOS runs on resource-constrained smart cards (8-64KB RAM).
  * Global reference table is stored in Flash and loaded to RAM when needed.
  * Dynamic expansion is supported within limits (MAX_GLOBAL_REFS_MAX).
+ * Write buffer reduces Flash write frequency by batching updates.
  * Use eflash library for persistence. */
 
 /* Address format flags */
@@ -140,6 +154,10 @@ typedef struct {
     u16 global_ref_capacity;                               /* Current capacity */
     u16 global_ref_count;                                  /* Current usage count */
     u32 global_ref_flash_offset;                           /* Flash storage offset */
+    
+    /* Write buffer for Flash optimization (reduces write frequency) */
+    GCOSPageCacheEntry page_cache[GLOBAL_REF_WRITE_BUFFER_PAGES];  /* 4-page cache */
+    u32 last_flush_time;                                   /* Last flush timestamp (for periodic flush) */
     
     /* System modules */
     GCOSSystemModule system_modules[MAX_SYSTEM_MODULES];
@@ -324,6 +342,69 @@ GCOSResult gcos_symbol_save_global_ref_table_to_flash(GCOSVM *vm);
  * @return GCOSResult Success or error code
  */
 GCOSResult gcos_symbol_load_global_ref_table_from_flash(GCOSVM *vm);
+
+/**
+ * @brief Flush write buffer to Flash (batch save)
+ * 
+ * Writes all dirty cached pages to Flash in a single operation.
+ * This reduces Flash write frequency and extends Flash lifespan.
+ * 
+ * Call this function:
+ * - After loading a module (batch save all changes)
+ * - Periodically (every N operations)
+ * - Before system shutdown
+ * 
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_symbol_flush_write_buffer(GCOSVM *vm);
+
+/**
+ * @brief Read a page from cache or Flash
+ * 
+ * If the page is in cache, return cached data.
+ * Otherwise, read from Flash and cache it.
+ * 
+ * @param vm VM instance
+ * @param lpn Logical Page Number to read
+ * @param out_data Output buffer for page data (must be USER_DATA_SIZE bytes)
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_symbol_page_cache_read(GCOSVM *vm, u32 lpn, u8 *out_data);
+
+/**
+ * @brief Write a page to cache (deferred Flash write)
+ * 
+ * Writes data to cache and marks it as dirty.
+ * The actual Flash write is deferred until flush_write_buffer() is called.
+ * 
+ * @param vm VM instance
+ * @param lpn Logical Page Number to write
+ * @param data Data to write (USER_DATA_SIZE bytes)
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_symbol_page_cache_write(GCOSVM *vm, u32 lpn, const u8 *data);
+
+/**
+ * @brief Invalidate a cached page
+ * 
+ * Removes a page from cache without writing to Flash.
+ * Use this when the page is no longer needed or has been invalidated.
+ * 
+ * @param vm VM instance
+ * @param lpn Logical Page Number to invalidate
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_symbol_page_cache_invalidate(GCOSVM *vm, u32 lpn);
+
+/**
+ * @brief Check if a page is in cache
+ * 
+ * @param vm VM instance
+ * @param lpn Logical Page Number to check
+ * @return true if page is in cache
+ */
+bool gcos_symbol_page_cache_contains(GCOSVM *vm, u32 lpn);
 
 /**
  * @brief Dump symbol tables for debugging

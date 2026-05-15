@@ -43,6 +43,9 @@ static u32 calculate_crc32_local(const u8 *data, u32 size) {
     return crc ^ 0xFFFFFFFF;
 }
 
+/* Forward declarations for page cache functions */
+static void init_page_cache(void);
+
 /* Global symbol resolver instance */
 static GCOSSymbolResolver g_symbol_resolver;
 static bool g_resolver_initialized = false;
@@ -116,6 +119,9 @@ GCOSResult gcos_symbol_resolver_init(GCOSVM *vm) {
     /* Initialize statistics */
     g_symbol_resolver.total_resolutions = 0;
     g_symbol_resolver.failed_resolutions = 0;
+    
+    /* Initialize page cache (Flash optimization) */
+    init_page_cache();
     
     g_resolver_initialized = true;
     
@@ -433,8 +439,8 @@ u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address,
     
     g_symbol_resolver.global_ref_count++;
     
-    /* NOTE: This entry MUST be persisted to Flash via eflash library */
-    /* TODO: Call eflash_save_global_ref_table() after creation */
+    /* NOTE: Global ref table changes should be saved via page_cache_write if needed */
+    /* For now, rely on explicit flush calls after module loading */
     
     return make_global_addr(index);
 }
@@ -829,6 +835,251 @@ GCOSResult gcos_symbol_load_global_ref_table_from_flash(GCOSVM *vm) {
     
     GCOS_PRINTF("[Symbol Resolver] Global ref table loaded successfully from Flash\n");
     GCOS_PRINTF("[Symbol Resolver] Restored: %u entries, capacity %u\n", count, capacity);
+    
+    return GCOS_SUCCESS;
+}
+
+/* ============================================================================
+ * Page Cache Implementation (4-Page Write Buffer)
+ * ============================================================================ */
+
+/**
+ * @brief Initialize page cache
+ * Called during symbol resolver initialization
+ */
+static void init_page_cache(void) {
+    for (int i = 0; i < GLOBAL_REF_WRITE_BUFFER_PAGES; i++) {
+        g_symbol_resolver.page_cache[i].lpn = 0xFFFFFFFF;  /* Invalid */
+        g_symbol_resolver.page_cache[i].dirty = false;
+        g_symbol_resolver.page_cache[i].valid = false;
+        memset(g_symbol_resolver.page_cache[i].data, 0, USER_DATA_SIZE);
+    }
+    g_symbol_resolver.last_flush_time = 0;
+}
+
+/**
+ * @brief Find a cached page by LPN
+ * @param lpn Logical Page Number
+ * @return Cache slot index, or -1 if not found
+ */
+static int find_cached_page(u32 lpn) {
+    for (int i = 0; i < GLOBAL_REF_WRITE_BUFFER_PAGES; i++) {
+        if (g_symbol_resolver.page_cache[i].valid && 
+            g_symbol_resolver.page_cache[i].lpn == lpn) {
+            return i;
+        }
+    }
+    return -1;  /* Not found */
+}
+
+/**
+ * @brief Find an empty cache slot
+ * @return Cache slot index, or -1 if all slots are full
+ */
+static int find_empty_slot(void) {
+    for (int i = 0; i < GLOBAL_REF_WRITE_BUFFER_PAGES; i++) {
+        if (!g_symbol_resolver.page_cache[i].valid) {
+            return i;
+        }
+    }
+    return -1;  /* No empty slot */
+}
+
+/**
+ * @brief Find the least recently used (LRU) slot for eviction
+ * For simplicity, we evict the first clean slot, or the first slot if all are dirty
+ * @return Cache slot index to evict
+ */
+static int find_eviction_slot(void) {
+    /* First, try to find a clean slot */
+    for (int i = 0; i < GLOBAL_REF_WRITE_BUFFER_PAGES; i++) {
+        if (g_symbol_resolver.page_cache[i].valid && 
+            !g_symbol_resolver.page_cache[i].dirty) {
+            return i;
+        }
+    }
+    
+    /* If all are dirty, evict the first one (simple LRU approximation) */
+    return 0;
+}
+
+GCOSResult gcos_symbol_page_cache_read(GCOSVM *vm, u32 lpn, u8 *out_data) {
+    if (!g_resolver_initialized || out_data == NULL) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    /* Check if page is already in cache */
+    int slot = find_cached_page(lpn);
+    if (slot >= 0) {
+        /* Cache hit - copy data from cache */
+        memcpy(out_data, g_symbol_resolver.page_cache[slot].data, USER_DATA_SIZE);
+        GCOS_PRINTF("[Page Cache] HIT: LPN 0x%08X (slot %d)\n", lpn, slot);
+        return GCOS_SUCCESS;
+    }
+    
+    /* Cache miss - read from Flash */
+    GCOS_PRINTF("[Page Cache] MISS: LPN 0x%08X, reading from Flash...\n", lpn);
+    
+    int ret = eflash_ftl_read_logical(lpn, out_data, USER_DATA_SIZE);
+    if (ret != 0) {
+        GCOS_PRINTF("[Page Cache] ERROR: Failed to read LPN 0x%08X from Flash (ret=%d)\n", 
+                   lpn, ret);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    /* Cache the page */
+    slot = find_empty_slot();
+    if (slot < 0) {
+        /* Cache is full, need to evict */
+        slot = find_eviction_slot();
+        
+        /* If evicted slot is dirty, flush it first */
+        if (g_symbol_resolver.page_cache[slot].dirty) {
+            GCOS_PRINTF("[Page Cache] Evicting dirty page LPN 0x%08X (slot %d), flushing...\n",
+                       g_symbol_resolver.page_cache[slot].lpn, slot);
+            
+            int write_ret = eflash_ftl_write_logical(
+                g_symbol_resolver.page_cache[slot].lpn,
+                g_symbol_resolver.page_cache[slot].data,
+                USER_DATA_SIZE);
+            
+            if (write_ret != 0) {
+                GCOS_PRINTF("[Page Cache] ERROR: Failed to flush evicted page (ret=%d)\n", write_ret);
+                return GCOS_ERR_FILE_FORMAT;
+            }
+        }
+        
+        GCOS_PRINTF("[Page Cache] Evicted LPN 0x%08X (slot %d)\n",
+                   g_symbol_resolver.page_cache[slot].lpn, slot);
+    }
+    
+    /* Load new page into cache slot */
+    g_symbol_resolver.page_cache[slot].lpn = lpn;
+    memcpy(g_symbol_resolver.page_cache[slot].data, out_data, USER_DATA_SIZE);
+    g_symbol_resolver.page_cache[slot].dirty = false;
+    g_symbol_resolver.page_cache[slot].valid = true;
+    
+    GCOS_PRINTF("[Page Cache] Cached LPN 0x%08X (slot %d)\n", lpn, slot);
+    
+    return GCOS_SUCCESS;
+}
+
+GCOSResult gcos_symbol_page_cache_write(GCOSVM *vm, u32 lpn, const u8 *data) {
+    if (!g_resolver_initialized || data == NULL) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    /* Check if page is already in cache */
+    int slot = find_cached_page(lpn);
+    
+    if (slot < 0) {
+        /* Not in cache, need to allocate a slot */
+        slot = find_empty_slot();
+        
+        if (slot < 0) {
+            /* Cache is full, need to evict */
+            slot = find_eviction_slot();
+            
+            /* If evicted slot is dirty, flush it first */
+            if (g_symbol_resolver.page_cache[slot].dirty) {
+                GCOS_PRINTF("[Page Cache] Evicting dirty page LPN 0x%08X (slot %d), flushing...\n",
+                           g_symbol_resolver.page_cache[slot].lpn, slot);
+                
+                int write_ret = eflash_ftl_write_logical(
+                    g_symbol_resolver.page_cache[slot].lpn,
+                    g_symbol_resolver.page_cache[slot].data,
+                    USER_DATA_SIZE);
+                
+                if (write_ret != 0) {
+                    GCOS_PRINTF("[Page Cache] ERROR: Failed to flush evicted page (ret=%d)\n", write_ret);
+                    return GCOS_ERR_FILE_FORMAT;
+                }
+            }
+            
+            GCOS_PRINTF("[Page Cache] Evicted LPN 0x%08X (slot %d)\n",
+                       g_symbol_resolver.page_cache[slot].lpn, slot);
+        }
+        
+        /* Load new page into cache slot */
+        g_symbol_resolver.page_cache[slot].lpn = lpn;
+        g_symbol_resolver.page_cache[slot].valid = true;
+        
+        GCOS_PRINTF("[Page Cache] Allocated slot %d for LPN 0x%08X\n", slot, lpn);
+    }
+    
+    /* Write data to cache and mark as dirty */
+    memcpy(g_symbol_resolver.page_cache[slot].data, data, USER_DATA_SIZE);
+    g_symbol_resolver.page_cache[slot].dirty = true;
+    
+    GCOS_PRINTF("[Page Cache] WRITE: LPN 0x%08X (slot %d) marked dirty\n", lpn, slot);
+    
+    return GCOS_SUCCESS;
+}
+
+GCOSResult gcos_symbol_page_cache_invalidate(GCOSVM *vm, u32 lpn) {
+    if (!g_resolver_initialized) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    int slot = find_cached_page(lpn);
+    if (slot < 0) {
+        /* Page not in cache, nothing to do */
+        return GCOS_SUCCESS;
+    }
+    
+    /* Invalidate the slot */
+    g_symbol_resolver.page_cache[slot].lpn = 0xFFFFFFFF;
+    g_symbol_resolver.page_cache[slot].dirty = false;
+    g_symbol_resolver.page_cache[slot].valid = false;
+    memset(g_symbol_resolver.page_cache[slot].data, 0, USER_DATA_SIZE);
+    
+    GCOS_PRINTF("[Page Cache] INVALIDATE: LPN 0x%08X (slot %d)\n", lpn, slot);
+    
+    return GCOS_SUCCESS;
+}
+
+bool gcos_symbol_page_cache_contains(GCOSVM *vm, u32 lpn) {
+    (void)vm;
+    return find_cached_page(lpn) >= 0;
+}
+
+GCOSResult gcos_symbol_flush_write_buffer(GCOSVM *vm) {
+    if (!g_resolver_initialized) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    int flushed_count = 0;
+    
+    /* Flush all dirty pages */
+    for (int i = 0; i < GLOBAL_REF_WRITE_BUFFER_PAGES; i++) {
+        if (g_symbol_resolver.page_cache[i].valid && 
+            g_symbol_resolver.page_cache[i].dirty) {
+            
+            GCOS_PRINTF("[Page Cache] Flushing dirty page LPN 0x%08X (slot %d)...\n",
+                       g_symbol_resolver.page_cache[i].lpn, i);
+            
+            int ret = eflash_ftl_write_logical(
+                g_symbol_resolver.page_cache[i].lpn,
+                g_symbol_resolver.page_cache[i].data,
+                USER_DATA_SIZE);
+            
+            if (ret != 0) {
+                GCOS_PRINTF("[Page Cache] ERROR: Failed to flush slot %d (ret=%d)\n", i, ret);
+                return GCOS_ERR_FILE_FORMAT;
+            }
+            
+            /* Clear dirty flag */
+            g_symbol_resolver.page_cache[i].dirty = false;
+            flushed_count++;
+        }
+    }
+    
+    if (flushed_count > 0) {
+        g_symbol_resolver.last_flush_time++;
+        GCOS_PRINTF("[Page Cache] Flushed %d dirty pages successfully\n", flushed_count);
+    } else {
+        GCOS_PRINTF("[Page Cache] No dirty pages to flush\n");
+    }
     
     return GCOS_SUCCESS;
 }
