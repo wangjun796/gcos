@@ -12,8 +12,36 @@
 #include "gcos_symbol_resolver.h"
 #include "gcos_vm.h"
 #include "gcos_platform.h"  /* For GCOS_PRINTF */
+#include "eflash_ftl.h"     /* For Flash operations */
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>         /* For malloc/free */
+
+/* External function declarations */
+/* extern u32 calculate_crc32(const u8 *data, u32 size);  /* From gcos_flash_storage.c */
+
+/**
+ * @brief Calculate CRC32 checksum (simple implementation)
+ * @param data Data buffer
+ * @param size Data size
+ * @return CRC32 checksum
+ */
+static u32 calculate_crc32_local(const u8 *data, u32 size) {
+    u32 crc = 0xFFFFFFFF;
+    
+    for (u32 i = 0; i < size; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            if (crc & 1) {
+                crc = (crc >> 1) ^ 0xEDB88320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    
+    return crc ^ 0xFFFFFFFF;
+}
 
 /* Global symbol resolver instance */
 static GCOSSymbolResolver g_symbol_resolver;
@@ -70,11 +98,17 @@ GCOSResult gcos_symbol_resolver_init(GCOSVM *vm) {
     
     memset(&g_symbol_resolver, 0, sizeof(GCOSSymbolResolver));
     
-    /* Initialize global reference table */
+    /* Initialize global reference table (Flash-backed with dynamic expansion)
+     * Initial capacity: MAX_GLOBAL_REFS (64 entries)
+     * Can be expanded up to MAX_GLOBAL_REFS_MAX (256 entries) */
+    g_symbol_resolver.global_ref_count = 0;
+    g_symbol_resolver.global_ref_capacity = MAX_GLOBAL_REFS;
+    g_symbol_resolver.global_ref_table_ext = NULL;
+    g_symbol_resolver.global_ref_flash_offset = 0;
+    
     for (int i = 0; i < MAX_GLOBAL_REFS; i++) {
         g_symbol_resolver.global_ref_table[i].is_valid = false;
     }
-    g_symbol_resolver.global_ref_count = 0;
     
     /* Initialize system modules */
     g_symbol_resolver.system_module_count = 0;
@@ -85,7 +119,18 @@ GCOSResult gcos_symbol_resolver_init(GCOSVM *vm) {
     
     g_resolver_initialized = true;
     
-    GCOS_PRINTF("[Symbol Resolver] Initialized\n");
+    GCOS_PRINTF("[Symbol Resolver] Initialized (base table: %u entries, %u bytes)\n",
+               MAX_GLOBAL_REFS, (unsigned int)(MAX_GLOBAL_REFS * sizeof(GCOSGlobalRefEntry)));
+    GCOS_PRINTF("[Symbol Resolver] Max capacity: %u entries (expandable)\n", MAX_GLOBAL_REFS_MAX);
+    
+    /* Try to load from Flash (if exists) */
+    GCOSResult ret = gcos_symbol_load_global_ref_table_from_flash(vm);
+    if (ret == GCOS_SUCCESS) {
+        GCOS_PRINTF("[Symbol Resolver] Loaded from Flash successfully\n");
+    } else {
+        GCOS_PRINTF("[Symbol Resolver] No Flash data found (fresh start)\n");
+    }
+    
     return GCOS_SUCCESS;
 }
 
@@ -313,15 +358,26 @@ bool gcos_symbol_resolve_address(GCOSVM *vm, u16 compact_addr, u32 *out_logical_
     }
     
     if (is_global_ref(compact_addr)) {
-        /* Global reference - look up in global reference table */
+        /* Global reference - look up in global reference table (base or extension) */
         u16 index = get_index(compact_addr);
         
         if (index >= g_symbol_resolver.global_ref_count) {
-            GCOS_PRINTF("[Symbol Resolver] ERROR: Invalid global ref index %u\n", index);
+            GCOS_PRINTF("[Symbol Resolver] ERROR: Invalid global ref index %u (count=%u)\n", 
+                       index, g_symbol_resolver.global_ref_count);
             return false;
         }
         
-        GCOSGlobalRefEntry *entry = &g_symbol_resolver.global_ref_table[index];
+        /* Get entry from base table or extension */
+        GCOSGlobalRefEntry *entry;
+        if (index < MAX_GLOBAL_REFS) {
+            entry = &g_symbol_resolver.global_ref_table[index];
+        } else {
+            if (g_symbol_resolver.global_ref_table_ext == NULL) {
+                GCOS_PRINTF("[Symbol Resolver] ERROR: Extended table not allocated for index %u\n", index);
+                return false;
+            }
+            entry = &g_symbol_resolver.global_ref_table_ext[index - MAX_GLOBAL_REFS];
+        }
         
         if (!entry->is_valid) {
             GCOS_PRINTF("[Symbol Resolver] ERROR: Invalid global ref entry %u\n", index);
@@ -344,13 +400,31 @@ u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address,
         return SYMBOL_IDX_INVALID;
     }
     
-    if (g_symbol_resolver.global_ref_count >= MAX_GLOBAL_REFS) {
-        GCOS_PRINTF("[Symbol Resolver] ERROR: Global ref table full\n");
-        return SYMBOL_IDX_INVALID;
+    /* Check if table is full - try to expand */
+    if (g_symbol_resolver.global_ref_count >= g_symbol_resolver.global_ref_capacity) {
+        GCOS_PRINTF("[Symbol Resolver] Global ref table FULL (%u/%u). Attempting expansion...\n",
+                   g_symbol_resolver.global_ref_count, g_symbol_resolver.global_ref_capacity);
+        
+        /* Try to expand the table */
+        GCOSResult ret = gcos_symbol_expand_global_ref_table(vm);
+        if (ret != GCOS_SUCCESS) {
+            GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to expand global ref table\n");
+            return SYMBOL_IDX_INVALID;
+        }
+        
+        GCOS_PRINTF("[Symbol Resolver] Table expanded successfully. New capacity: %u\n",
+                   g_symbol_resolver.global_ref_capacity);
     }
     
     u16 index = g_symbol_resolver.global_ref_count;
-    GCOSGlobalRefEntry *entry = &g_symbol_resolver.global_ref_table[index];
+    
+    /* Get entry pointer (base table or extension) */
+    GCOSGlobalRefEntry *entry;
+    if (index < MAX_GLOBAL_REFS) {
+        entry = &g_symbol_resolver.global_ref_table[index];
+    } else {
+        entry = &g_symbol_resolver.global_ref_table_ext[index - MAX_GLOBAL_REFS];
+    }
     
     entry->logical_address = logical_address;
     entry->module_id = module_id;
@@ -358,6 +432,9 @@ u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address,
     entry->is_valid = true;
     
     g_symbol_resolver.global_ref_count++;
+    
+    /* NOTE: This entry MUST be persisted to Flash via eflash library */
+    /* TODO: Call eflash_save_global_ref_table() after creation */
     
     return make_global_addr(index);
 }
@@ -438,8 +515,10 @@ void gcos_symbol_print_stats(GCOSVM *vm) {
     GCOS_PRINTF("\n=== Symbol Resolver Statistics ===\n");
     GCOS_PRINTF("Total resolutions:    %u\n", g_symbol_resolver.total_resolutions);
     GCOS_PRINTF("Failed resolutions:   %u\n", g_symbol_resolver.failed_resolutions);
-    GCOS_PRINTF("Global ref entries:   %u / %u\n", 
-               g_symbol_resolver.global_ref_count, MAX_GLOBAL_REFS);
+    GCOS_PRINTF("Global ref entries:   %u / %u (static, %u bytes)\n", 
+               g_symbol_resolver.global_ref_count,
+               MAX_GLOBAL_REFS,
+               (unsigned int)(MAX_GLOBAL_REFS * sizeof(GCOSGlobalRefEntry)));
     GCOS_PRINTF("System modules:       %u / %u\n",
                g_symbol_resolver.system_module_count, MAX_SYSTEM_MODULES);
     GCOS_PRINTF("================================\n\n");
@@ -481,7 +560,10 @@ void gcos_symbol_dump_tables(GCOSVM *vm, u8 module_id) {
     
     /* Dump global reference table */
     GCOS_PRINTF("\n--- Global Reference Table ---\n");
-    GCOS_PRINTF("Entries: %u / %u\n", g_symbol_resolver.global_ref_count, MAX_GLOBAL_REFS);
+    GCOS_PRINTF("Entries: %u / %u (static, %u bytes)\n", 
+               g_symbol_resolver.global_ref_count,
+               MAX_GLOBAL_REFS,
+               (unsigned int)(MAX_GLOBAL_REFS * sizeof(GCOSGlobalRefEntry)));
     for (u16 i = 0; i < g_symbol_resolver.global_ref_count; i++) {
         GCOSGlobalRefEntry *entry = &g_symbol_resolver.global_ref_table[i];
         if (entry->is_valid) {
@@ -508,4 +590,245 @@ void gcos_symbol_dump_tables(GCOSVM *vm, u8 module_id) {
     }
     
     GCOS_PRINTF("==========================\n\n");
+}
+
+/* ============================================================================
+ * Flash Persistence and Dynamic Expansion Implementation
+ * ============================================================================ */
+
+GCOSResult gcos_symbol_expand_global_ref_table(GCOSVM *vm) {
+    if (!g_resolver_initialized) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    /* Check if we've reached maximum capacity */
+    if (g_symbol_resolver.global_ref_capacity >= MAX_GLOBAL_REFS_MAX) {
+        GCOS_PRINTF("[Symbol Resolver] ERROR: Global ref table at maximum capacity (%u)\n",
+                   MAX_GLOBAL_REFS_MAX);
+        return GCOS_ERR_OUT_OF_MEMORY;
+    }
+    
+    /* Calculate new capacity */
+    u16 new_capacity = g_symbol_resolver.global_ref_capacity + GLOBAL_REF_GROWTH_STEP;
+    if (new_capacity > MAX_GLOBAL_REFS_MAX) {
+        new_capacity = MAX_GLOBAL_REFS_MAX;
+    }
+    
+    /* Calculate extension size */
+    u16 ext_size = new_capacity - MAX_GLOBAL_REFS;
+    
+    GCOS_PRINTF("[Symbol Resolver] Expanding global ref table: %u -> %u entries\n",
+               g_symbol_resolver.global_ref_capacity, new_capacity);
+    GCOS_PRINTF("[Symbol Resolver] Extension size: %u entries (%u bytes)\n",
+               ext_size, (unsigned int)(ext_size * sizeof(GCOSGlobalRefEntry)));
+    
+    /* Allocate extension table if not already allocated */
+    if (g_symbol_resolver.global_ref_table_ext == NULL) {
+        /* For smart card environment, we use a static extension buffer
+         * In production, this would be allocated from a pre-reserved RAM pool */
+        static GCOSGlobalRefEntry static_ext_table[MAX_GLOBAL_REFS_MAX - MAX_GLOBAL_REFS];
+        g_symbol_resolver.global_ref_table_ext = static_ext_table;
+        
+        /* Initialize extension table */
+        for (u16 i = 0; i < (MAX_GLOBAL_REFS_MAX - MAX_GLOBAL_REFS); i++) {
+            static_ext_table[i].is_valid = false;
+        }
+    }
+    
+    /* Update capacity */
+    g_symbol_resolver.global_ref_capacity = new_capacity;
+    
+    GCOS_PRINTF("[Symbol Resolver] Expansion complete. New capacity: %u\n", new_capacity);
+    
+    /* Save expanded table to Flash */
+    return gcos_symbol_save_global_ref_table_to_flash(vm);
+}
+
+GCOSResult gcos_symbol_save_global_ref_table_to_flash(GCOSVM *vm) {
+    if (!g_resolver_initialized) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    /* Calculate total size to save */
+    u32 total_entries = g_symbol_resolver.global_ref_count;
+    u32 base_size = (total_entries < MAX_GLOBAL_REFS) ? 
+                    total_entries : MAX_GLOBAL_REFS;
+    u32 ext_size = (total_entries > MAX_GLOBAL_REFS) ? 
+                   (total_entries - MAX_GLOBAL_REFS) : 0;
+    
+    u32 total_size = sizeof(u32) +           /* Magic number */
+                     sizeof(u16) +           /* Count */
+                     sizeof(u16) +           /* Capacity */
+                     (base_size * sizeof(GCOSGlobalRefEntry)) +
+                     (ext_size * sizeof(GCOSGlobalRefEntry)) +
+                     sizeof(u32);            /* CRC32 */
+    
+    GCOS_PRINTF("[Symbol Resolver] Saving global ref table to Flash: %u entries, %u bytes\n",
+               total_entries, total_size);
+    
+    /* Allocate temporary buffer for serialization */
+    u8 *buffer = (u8 *)malloc(total_size);
+    if (buffer == NULL) {
+        GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to allocate buffer for Flash save\n");
+        return GCOS_ERR_OUT_OF_MEMORY;
+    }
+    
+    /* Serialize data */
+    u32 offset = 0;
+    
+    /* Magic number */
+    u32 magic = 0x47524546; /* "GREF" */
+    memcpy(buffer + offset, &magic, sizeof(u32));
+    offset += sizeof(u32);
+    
+    /* Count and capacity */
+    memcpy(buffer + offset, &g_symbol_resolver.global_ref_count, sizeof(u16));
+    offset += sizeof(u16);
+    memcpy(buffer + offset, &g_symbol_resolver.global_ref_capacity, sizeof(u16));
+    offset += sizeof(u16);
+    
+    /* Base table entries */
+    memcpy(buffer + offset, g_symbol_resolver.global_ref_table, 
+           base_size * sizeof(GCOSGlobalRefEntry));
+    offset += base_size * sizeof(GCOSGlobalRefEntry);
+    
+    /* Extension table entries (if any) */
+    if (ext_size > 0 && g_symbol_resolver.global_ref_table_ext != NULL) {
+        memcpy(buffer + offset, g_symbol_resolver.global_ref_table_ext,
+               ext_size * sizeof(GCOSGlobalRefEntry));
+        offset += ext_size * sizeof(GCOSGlobalRefEntry);
+    }
+    
+    /* Calculate CRC32 */
+    u32 crc = calculate_crc32_local(buffer, offset);
+    memcpy(buffer + offset, &crc, sizeof(u32));
+    offset += sizeof(u32);
+    
+    /* Write to Flash using eflash FTL */
+    int ret = eflash_ftl_write_logical(g_symbol_resolver.global_ref_flash_offset, 
+                                       buffer, total_size);
+    
+    free(buffer);
+    
+    if (ret != 0) {
+        GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to write to Flash (ret=%d)\n", ret);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    GCOS_PRINTF("[Symbol Resolver] Global ref table saved to Flash at offset 0x%08X\n",
+               g_symbol_resolver.global_ref_flash_offset);
+    
+    return GCOS_SUCCESS;
+}
+
+GCOSResult gcos_symbol_load_global_ref_table_from_flash(GCOSVM *vm) {
+    if (!g_resolver_initialized) {
+        return GCOS_ERROR_INVALID_STATE;
+    }
+    
+    /* Use a fixed Flash offset for global ref table storage */
+    /* This should match the Flash layout defined in gcos_flash_storage.c */
+    u32 flash_offset = 0x031000; /* Symbol Table Region */
+    g_symbol_resolver.global_ref_flash_offset = flash_offset;
+    
+    /* Read header (magic + count + capacity) */
+    u8 header_buffer[sizeof(u32) + sizeof(u16) + sizeof(u16)];
+    int ret = eflash_ftl_read_logical(flash_offset, header_buffer, sizeof(header_buffer));
+    
+    if (ret != 0) {
+        GCOS_PRINTF("[Symbol Resolver] WARNING: Failed to read from Flash (ret=%d)\n", ret);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    /* Check magic number */
+    u32 magic;
+    memcpy(&magic, header_buffer, sizeof(u32));
+    if (magic != 0x47524546) { /* "GREF" */
+        GCOS_PRINTF("[Symbol Resolver] WARNING: Invalid magic number (0x%08X)\n", magic);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    /* Read count and capacity */
+    u16 count, capacity;
+    memcpy(&count, header_buffer + sizeof(u32), sizeof(u16));
+    memcpy(&capacity, header_buffer + sizeof(u32) + sizeof(u16), sizeof(u16));
+    
+    GCOS_PRINTF("[Symbol Resolver] Loading global ref table from Flash: %u entries, capacity %u\n",
+               count, capacity);
+    
+    /* Validate count */
+    if (count > MAX_GLOBAL_REFS_MAX) {
+        GCOS_PRINTF("[Symbol Resolver] ERROR: Invalid count %u (max %u)\n", 
+                   count, MAX_GLOBAL_REFS_MAX);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    /* Calculate total data size */
+    u32 base_size = (count < MAX_GLOBAL_REFS) ? count : MAX_GLOBAL_REFS;
+    u32 ext_size = (count > MAX_GLOBAL_REFS) ? (count - MAX_GLOBAL_REFS) : 0;
+    u32 total_data_size = sizeof(header_buffer) +
+                         (base_size * sizeof(GCOSGlobalRefEntry)) +
+                         (ext_size * sizeof(GCOSGlobalRefEntry)) +
+                         sizeof(u32); /* CRC */
+    
+    /* Allocate buffer for full read */
+    u8 *buffer = (u8 *)malloc(total_data_size);
+    if (buffer == NULL) {
+        GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to allocate buffer for Flash load\n");
+        return GCOS_ERR_OUT_OF_MEMORY;
+    }
+    
+    /* Read entire table from Flash */
+    ret = eflash_ftl_read_logical(flash_offset, buffer, total_data_size);
+    if (ret != 0) {
+        free(buffer);
+        GCOS_PRINTF("[Symbol Resolver] ERROR: Failed to read table from Flash (ret=%d)\n", ret);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    /* Verify CRC */
+    u32 stored_crc;
+    memcpy(&stored_crc, buffer + total_data_size - sizeof(u32), sizeof(u32));
+    u32 calculated_crc = calculate_crc32_local(buffer, total_data_size - sizeof(u32));
+    
+    if (stored_crc != calculated_crc) {
+        free(buffer);
+        GCOS_PRINTF("[Symbol Resolver] ERROR: CRC mismatch (stored=0x%08X, calc=0x%08X)\n",
+                   stored_crc, calculated_crc);
+        return GCOS_ERR_FILE_FORMAT;
+    }
+    
+    /* Restore count and capacity */
+    g_symbol_resolver.global_ref_count = count;
+    g_symbol_resolver.global_ref_capacity = capacity;
+    
+    /* Restore base table */
+    u32 offset = sizeof(header_buffer);
+    memcpy(g_symbol_resolver.global_ref_table, buffer + offset,
+           base_size * sizeof(GCOSGlobalRefEntry));
+    offset += base_size * sizeof(GCOSGlobalRefEntry);
+    
+    /* Restore extension table (if any) */
+    if (ext_size > 0) {
+        /* Allocate extension if needed */
+        if (g_symbol_resolver.global_ref_table_ext == NULL) {
+            static GCOSGlobalRefEntry static_ext_table[MAX_GLOBAL_REFS_MAX - MAX_GLOBAL_REFS];
+            g_symbol_resolver.global_ref_table_ext = static_ext_table;
+            
+            /* Initialize */
+            for (u16 i = 0; i < (MAX_GLOBAL_REFS_MAX - MAX_GLOBAL_REFS); i++) {
+                static_ext_table[i].is_valid = false;
+            }
+        }
+        
+        memcpy(g_symbol_resolver.global_ref_table_ext, buffer + offset,
+               ext_size * sizeof(GCOSGlobalRefEntry));
+    }
+    
+    free(buffer);
+    
+    GCOS_PRINTF("[Symbol Resolver] Global ref table loaded successfully from Flash\n");
+    GCOS_PRINTF("[Symbol Resolver] Restored: %u entries, capacity %u\n", count, capacity);
+    
+    return GCOS_SUCCESS;
 }

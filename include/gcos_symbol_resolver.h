@@ -38,8 +38,15 @@
 /* Maximum number of system modules */
 #define MAX_SYSTEM_MODULES      8
 
-/* Maximum number of global references */
-#define MAX_GLOBAL_REFS         256
+/* Maximum number of global references (initial capacity for smart card environment) */
+#define MAX_GLOBAL_REFS         64      /* Initial static capacity */
+#define MAX_GLOBAL_REFS_MAX     256     /* Absolute maximum after expansion */
+#define GLOBAL_REF_GROWTH_STEP  32      /* Expansion step size */
+
+/* Note: GCOS runs on resource-constrained smart cards (8-64KB RAM).
+ * Global reference table is stored in Flash and loaded to RAM when needed.
+ * Dynamic expansion is supported within limits (MAX_GLOBAL_REFS_MAX).
+ * Use eflash library for persistence. */
 
 /* Address format flags */
 #define ADDR_FLAG_GLOBAL        0x8000  /* Bit 15: global reference flag */
@@ -71,8 +78,17 @@ typedef struct {
 } GCOSImportSymbol;
 
 /**
- * @brief Global reference table entry
+ * @brief Global reference table entry (compact format for Flash storage)
  * Maps 16-bit global reference index to 32-bit logical address
+ * 
+ * Memory layout (12 bytes per entry):
+ * - logical_address: 4 bytes (u32)
+ * - module_id: 1 byte (u8)
+ * - symbol_index: 2 bytes (u16)
+ * - is_valid: 1 byte (bool, padded)
+ * 
+ * Total table size: MAX_GLOBAL_REFS × 12 bytes = 768 bytes (for 64 entries)
+ * This MUST fit in RAM and be persistable to Flash.
  */
 typedef struct {
     u32 logical_address;        /* 32-bit logical address */
@@ -114,9 +130,16 @@ typedef struct {
     GCOSImportSymbol import_tables[MAX_MODULES][MAX_IMPORT_SYMBOLS];
     u8 import_counts[MAX_MODULES];
     
-    /* Global reference table */
-    GCOSGlobalRefEntry global_ref_table[MAX_GLOBAL_REFS];
-    u16 global_ref_count;
+    /* Global reference table (Flash-backed with dynamic expansion)
+     * - Initial capacity: MAX_GLOBAL_REFS (64 entries, 768 bytes)
+     * - Maximum capacity: MAX_GLOBAL_REFS_MAX (256 entries, 3 KB)
+     * - Stored in Flash via eflash library
+     * - Loaded to RAM on demand for fast access */
+    GCOSGlobalRefEntry global_ref_table[MAX_GLOBAL_REFS];  /* Static base table */
+    GCOSGlobalRefEntry *global_ref_table_ext;              /* Extension pointer (NULL if not expanded) */
+    u16 global_ref_capacity;                               /* Current capacity */
+    u16 global_ref_count;                                  /* Current usage count */
+    u32 global_ref_flash_offset;                           /* Flash storage offset */
     
     /* System modules */
     GCOSSystemModule system_modules[MAX_SYSTEM_MODULES];
@@ -209,12 +232,17 @@ bool gcos_symbol_resolve_address(GCOSVM *vm, u16 compact_addr, u32 *out_logical_
 
 /**
  * @brief Create global reference entry
- * Allocates entry in global reference table
+ * Allocates entry in static global reference table
+ * 
+ * IMPORTANT: This function will fail if table is full (MAX_GLOBAL_REFS reached).
+ * For smart card environment, table size is fixed and cannot be expanded.
+ * Plan your module design to stay within the limit.
+ * 
  * @param vm VM instance
  * @param logical_address 32-bit logical address
  * @param module_id Owning module ID
  * @param symbol_index Symbol index
- * @return 16-bit global reference address (with bit 15 set), or SYMBOL_IDX_INVALID
+ * @return 16-bit global reference address (with bit 15 set), or SYMBOL_IDX_INVALID if table full
  */
 u16 gcos_symbol_create_global_ref(GCOSVM *vm, u32 logical_address, 
                                    u8 module_id, u16 symbol_index);
@@ -257,6 +285,45 @@ GCOSResult gcos_symbol_call_system_func(GCOSVM *vm, const char *system_module_na
  * @param vm VM instance
  */
 void gcos_symbol_print_stats(GCOSVM *vm);
+
+/**
+ * @brief Expand global reference table (dynamic expansion)
+ * 
+ * When the static table is full, this function allocates an extension table.
+ * The extension is stored in Flash and loaded to RAM when needed.
+ * 
+ * Maximum capacity: MAX_GLOBAL_REFS_MAX (256 entries)
+ * Growth step: GLOBAL_REF_GROWTH_STEP (32 entries per expansion)
+ * 
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ * 
+ * Note: This uses a small temporary buffer for expansion, then persists to Flash.
+ * The expanded table is split into base (static) + extension (dynamic).
+ */
+GCOSResult gcos_symbol_expand_global_ref_table(GCOSVM *vm);
+
+/**
+ * @brief Save global reference table to Flash
+ * 
+ * Persists the entire global reference table (base + extension) to Flash.
+ * Called after module loading or when table is modified.
+ * 
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_symbol_save_global_ref_table_to_flash(GCOSVM *vm);
+
+/**
+ * @brief Load global reference table from Flash
+ * 
+ * Restores the global reference table from Flash during system startup.
+ * Automatically handles both static and expanded tables.
+ * 
+ * @param vm VM instance
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_symbol_load_global_ref_table_from_flash(GCOSVM *vm);
 
 /**
  * @brief Dump symbol tables for debugging

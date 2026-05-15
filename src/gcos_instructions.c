@@ -16,6 +16,7 @@
 #include "gcos_vm.h"
 #include "gcos_instructions.h"
 #include "gcos_platform.h"
+#include "gcos_flash_exec.h"     /* NEW: Flash execution support */
 #include <string.h>
 
 /* ============================================================================
@@ -40,7 +41,10 @@
             vm->runtime.exception = EXCEPTION_ACCESS_VIOLATION; \
             return GCOS_ERROR_MEMORY_ACCESS; \
         } \
-        (byte) = vm->runtime.module_code[vm->runtime.program_counter++]; \
+        /* SMART CARD: Read from Flash (XIP - Execute In Place) */ \
+        u32 flash_addr = vm->runtime.code_flash_offset + vm->runtime.program_counter; \
+        (byte) = FLASH_FETCH_BYTE(flash_addr); \
+        vm->runtime.program_counter++; \
     } while(0)
 
 #define READ_S8(vm, val) \
@@ -510,8 +514,10 @@ GCOSResult gcos_instruction_execute(GCOSVM *vm) {
         return GCOS_ERROR_MEMORY_ACCESS;
     }
     
-    /* Fetch opcode */
-    u8 opcode = vm->runtime.module_code[vm->runtime.program_counter++];
+    /* Fetch opcode from Flash (XIP - Execute In Place) */
+    u32 flash_addr = vm->runtime.code_flash_offset + vm->runtime.program_counter;
+    u8 opcode = FLASH_FETCH_BYTE(flash_addr);
+    vm->runtime.program_counter++;
     
     /* Dispatch based on opcode */
     switch (opcode) {

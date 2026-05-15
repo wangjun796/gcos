@@ -228,6 +228,18 @@ u8 gcos_persist_list_modules(GCOSVM *vm, u8 *module_ids, u8 max_count);
  */
 u16 gcos_persist_calc_crc16(const u8 *data, u32 length);
 
+/**
+ * @brief Save module metadata to Flash (smart card optimized)
+ * 
+ * This function saves module metadata including Flash offsets for XIP execution.
+ * Used by the new Flash-based loader.
+ * 
+ * @param vm VM instance
+ * @param module_index Module index
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_persistence_save_module_metadata(GCOSVM *vm, u8 module_index);
+
 #ifdef __cplusplus
 }
 #endif

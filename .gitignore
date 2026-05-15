@@ -25,6 +25,7 @@ Makefile
 *.cmake
 
 # 测试输出
+*.tlog
 *.log
 *.txt
 !README.md

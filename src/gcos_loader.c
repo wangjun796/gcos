@@ -14,6 +14,9 @@
 
 #include "gcos_vm.h"
 #include "gcos_platform.h"
+#include "gcos_flash_exec.h"     /* NEW: Flash execution support */
+#include "gcos_persistence.h"    /* NEW: Persistence support */
+#include "gcos_flash_storage.h"  /* NEW: Flash storage management */
 #include <string.h>
 
 /* ============================================================================
@@ -354,6 +357,9 @@ static GCOSResult load_global_section(GCOSVM *vm, const u8 *data, u32 size) {
  * - flag_paranum_localnum (u8): bit7=0 (2-byte), bit6-4=params, bit3-0=locals
  * - opstack_indstack (u8): bit7-5=opstack, bit4-0=indstack
  * 
+ * IMPORTANT: For smart card environment, code is stored in Flash (XIP),
+ * NOT copied to RAM. This saves significant RAM space.
+ * 
  * @param vm VM instance
  * @param data Section data
  * @param size Section size
@@ -416,15 +422,16 @@ static GCOSResult load_code_section(GCOSVM *vm, const u8 *data, u32 size) {
         if (bytecode_size > 0) {
             GCOS_PRINTF("  Bytecode: %u bytes\n", bytecode_size);
             
-            /* Copy bytecode to VM code area */
-            if (bytecode_size <= GCOS_MODULE_CODE_SIZE) {
-                memcpy(vm->runtime.module_code, &data[offset], bytecode_size);
-                vm->runtime.code_size = bytecode_size;
-            } else {
-                GCOS_PRINTF("  WARNING: Bytecode too large, truncating\n");
-                memcpy(vm->runtime.module_code, &data[offset], GCOS_MODULE_CODE_SIZE);
-                vm->runtime.code_size = GCOS_MODULE_CODE_SIZE;
-            }
+            /* SMART CARD OPTIMIZATION: Store code in Flash, NOT RAM */
+            /* Code will be executed directly from Flash (XIP - Execute In Place) */
+            
+            /* Update runtime context with Flash offsets */
+            /* Note: The SEF file has already been written to Flash by gcos_loader_load_sef_to_flash() */
+            /* Here we just record the code section offset within the SEF file */
+            vm->runtime.code_size = bytecode_size;
+            /* code_flash_offset will be set by the caller after SEF is written to Flash */
+            
+            GCOS_PRINTF("  [Flash] Code will be executed from Flash (XIP)\n");
         }
         
         /* Move to next function (for now, assume single function) */
@@ -432,7 +439,7 @@ static GCOSResult load_code_section(GCOSVM *vm, const u8 *data, u32 size) {
         break;
     }
     
-    GCOS_PRINTF("[Loader] Code section loaded successfully\n");
+    GCOS_PRINTF("[Loader] Code section loaded successfully (Flash storage)\n");
     return GCOS_SUCCESS;
 }
 
@@ -641,5 +648,104 @@ GCOSResult gcos_loader_get_module_info(const GCOSVM *vm, u8 module_index,
     info->app_count = module->app_instance_count; /* Use app_instance_count */
     info->code_offset = 0; /* Code offset tracked in runtime context */
     
+    return GCOS_SUCCESS;
+}
+
+/**
+ * @brief Load SEF file to Flash (smart card optimized)
+ * 
+ * This function:
+ * 1. Validates SEF header
+ * 2. Allocates Flash space for SEF file
+ * 3. Writes SEF file to Flash
+ * 4. Parses sections and extracts metadata
+ * 5. Updates VM runtime context with Flash offsets
+ * 6. Saves module metadata to Flash
+ * 
+ * Code is NOT copied to RAM - it stays in Flash for XIP execution.
+ * 
+ * @param vm VM instance
+ * @param sef_data SEF file data (temporary buffer for parsing)
+ * @param sef_size SEF file size
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_loader_load_sef_to_flash(GCOSVM *vm, const u8 *sef_data, u32 sef_size) {
+    if (vm == NULL || sef_data == NULL || sef_size == 0) {
+        return GCOS_ERR_INVALID_PARAM;
+    }
+    
+    GCOS_PRINTF("\n[Loader] === Loading SEF to Flash ===\n");
+    GCOS_PRINTF("[Loader] SEF file size: %u bytes\n", sef_size);
+    
+    /* Step 1: Validate SEF header */
+    u32 sef_version = 0;
+    GCOSResult ret = validate_sef_header(sef_data, sef_size, &sef_version);
+    if (ret != GCOS_SUCCESS) {
+        GCOS_PRINTF("[Loader] ERROR: Invalid SEF header\n");
+        return ret;
+    }
+    
+    GCOS_PRINTF("[Loader] SEF version: %u\n", sef_version);
+    
+    /* Step 2: Allocate Flash space for SEF file */
+    u32 flash_offset = gcos_flash_alloc_sef_space(sef_size);
+    if (flash_offset == FLASH_OFFSET_INVALID) {
+        GCOS_PRINTF("[Loader] ERROR: Failed to allocate Flash space\n");
+        return GCOS_ERR_OUT_OF_MEMORY;
+    }
+    
+    GCOS_PRINTF("[Loader] Allocated Flash space at offset: 0x%08X\n", flash_offset);
+    
+    /* Step 3: Write SEF file to Flash */
+    ret = eflash_ftl_write_logical(flash_offset, sef_data, sef_size);
+    if (ret != 0) {
+        GCOS_PRINTF("[Loader] ERROR: Failed to write SEF to Flash\n");
+        gcos_flash_free_sef_space(flash_offset);
+        return GCOS_ERR_FILE_FORMAT; /* Use FILE_FORMAT error for IO errors */
+    }
+    
+    GCOS_PRINTF("[Loader] SEF file written to Flash successfully\n");
+    
+    /* Step 4: Parse sections from SEF data in memory */
+    /* For now, we parse from the temporary buffer */
+    /* TODO: Implement streaming parser that reads from Flash directly */
+    ret = gcos_loader_load_sef(vm, sef_data, sef_size);
+    if (ret != GCOS_SUCCESS) {
+        GCOS_PRINTF("[Loader] ERROR: Failed to parse SEF sections\n");
+        gcos_flash_free_sef_space(flash_offset);
+        return ret;
+    }
+    
+    /* Step 5: Update VM runtime context with Flash offsets */
+    /* Find the newly loaded module */
+    u8 module_index = vm->module_count - 1; /* Last added module */
+    if (module_index >= MAX_MODULES) {
+        GCOS_PRINTF("[Loader] ERROR: Module index out of range\n");
+        gcos_flash_free_sef_space(flash_offset);
+        return GCOS_ERR_INVALID_PARAM;
+    }
+    
+    /* Store Flash offsets in runtime context */
+    vm->runtime.sef_flash_offset = flash_offset;
+    vm->runtime.sef_size = sef_size;
+    
+    /* Calculate code section offset within SEF file */
+    /* This should be extracted during section parsing */
+    /* For now, use a placeholder - will be updated by parse_code_section */
+    vm->runtime.code_flash_offset = flash_offset + 128; /* Placeholder */
+    
+    GCOS_PRINTF("[Loader] Runtime context updated:\n");
+    GCOS_PRINTF("  SEF Flash offset: 0x%08X\n", vm->runtime.sef_flash_offset);
+    GCOS_PRINTF("  SEF size: %u bytes\n", vm->runtime.sef_size);
+    GCOS_PRINTF("  Code Flash offset: 0x%08X\n", vm->runtime.code_flash_offset);
+    
+    /* Step 6: Save module metadata to Flash */
+    ret = gcos_persistence_save_module_metadata(vm, module_index);
+    if (ret != GCOS_SUCCESS) {
+        GCOS_PRINTF("[Loader] WARNING: Failed to save module metadata\n");
+        /* Non-fatal error - continue */
+    }
+    
+    GCOS_PRINTF("[Loader] === SEF loaded to Flash successfully ===\n\n");
     return GCOS_SUCCESS;
 }

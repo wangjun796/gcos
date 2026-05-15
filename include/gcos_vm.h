@@ -914,9 +914,13 @@ struct GCOSRuntimeContext {
     u8 heap[GCOS_HEAP_SIZE];
     u32 heap_used;                  /* 堆已使用大小 */
     
-    /* Module code area (non-volatile) */
-    u8 module_code[GCOS_MODULE_CODE_SIZE];  /* Module code storage */
-    u32 code_size;                  /* Code area used size */
+    /* Module code area (NOW IN FLASH - XIP Execute In Place)
+     * Code is stored in Flash, NOT copied to RAM.
+     * These fields are Flash offsets, not RAM pointers. */
+    u32 code_flash_offset;          /* Code section offset in Flash */
+    u32 code_size;                  /* Code section size */
+    u32 sef_flash_offset;           /* SEF file offset in Flash */
+    u32 sef_size;                   /* SEF file total size */
     
     /* Program counter */
     u32 program_counter;            /* PC - current instruction address */
@@ -1332,6 +1336,19 @@ GCOSResult gcos_instruction_execute(GCOSVM *vm);
  * @return GCOSResult Success or error code
  */
 GCOSResult gcos_loader_load_sef(GCOSVM *vm, const u8 *sef_data, u32 sef_size);
+
+/**
+ * @brief Load SEF file to Flash (smart card optimized)
+ * 
+ * This function stores the SEF file in Flash and executes code directly
+ * from Flash (XIP - Execute In Place), saving RAM space.
+ * 
+ * @param vm VM instance
+ * @param sef_data SEF file data (temporary buffer for parsing)
+ * @param sef_size SEF file size
+ * @return GCOSResult Success or error code
+ */
+GCOSResult gcos_loader_load_sef_to_flash(GCOSVM *vm, const u8 *sef_data, u32 sef_size);
 
 /**
  * @brief Validate loaded module
