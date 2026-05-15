@@ -12,6 +12,7 @@
 
 #include "gcos_vm.h"
 #include "gcos_app_manager.h"
+#include "gcos_module_registry.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -20,7 +21,7 @@
  * ============================================================================ */
 
 /**
- * @brief Check if module AID already exists
+ * @brief Check if module AID already exists in registry
  * 
  * @param vm VM instance
  * @param aid Module AID to check
@@ -28,9 +29,9 @@
  */
 static bool module_aid_exists(GCOSVM *vm, const GCOSAID *aid) {
     for (u8 i = 0; i < MAX_MODULES; i++) {
-        if (vm->modules[i].loaded && 
-            vm->modules[i].module_aid.length == aid->length &&
-            memcmp(vm->modules[i].module_aid.aid, aid->aid, aid->length) == 0) {
+        if (vm->module_registry[i].is_loaded && 
+            vm->module_registry[i].module_aid.length == aid->length &&
+            memcmp(vm->module_registry[i].module_aid.aid, aid->aid, aid->length) == 0) {
             return true;
         }
     }
@@ -38,14 +39,14 @@ static bool module_aid_exists(GCOSVM *vm, const GCOSAID *aid) {
 }
 
 /**
- * @brief Find a free module slot
+ * @brief Find a free slot in module registry
  * 
  * @param vm VM instance
  * @return Free module ID, or 0xFF if no free slot
  */
 static u8 find_free_module_slot(GCOSVM *vm) {
     for (u8 i = 0; i < MAX_MODULES; i++) {
-        if (!vm->modules[i].loaded) {
+        if (!vm->module_registry[i].is_loaded) {
             return i;
         }
     }
@@ -426,22 +427,22 @@ static bool parse_import_section(GCOSVM *vm, const u8 *import_data, u32 import_l
         load_ctx->imports[i].resolved = false;
         load_ctx->imports[i].resolved_module_id = 0xFF;
         
-        // Check if module exists in system
+        // Check if module exists in registry
         for (u8 mid = 0; mid < MAX_MODULES; mid++) {
-            if (vm->modules[mid].loaded &&
-                vm->modules[mid].module_aid.length == aid_len &&
-                memcmp(vm->modules[mid].module_aid.aid, import_aid.aid, aid_len) == 0) {
+            if (vm->module_registry[mid].is_loaded &&
+                vm->module_registry[mid].module_aid.length == aid_len &&
+                memcmp(vm->module_registry[mid].module_aid.aid, import_aid.aid, aid_len) == 0) {
                 
                 // Check version compatibility
-                if (vm->modules[mid].version >= module_version) {
+                if (vm->module_registry[mid].module_version >= module_version) {
                     load_ctx->imports[i].resolved = true;
                     load_ctx->imports[i].resolved_module_id = mid;
                     printf("[LOAD]   -> Resolved to Module ID %u (Version 0x%08X)\n",
-                           mid, vm->modules[mid].version);
+                           mid, vm->module_registry[mid].module_version);
                     break;
                 } else {
                     printf("[LOAD]   -> Version mismatch (required 0x%08X, found 0x%08X)\n",
-                           module_version, vm->modules[mid].version);
+                           module_version, vm->module_registry[mid].module_version);
                     return false;
                 }
             }
@@ -522,46 +523,49 @@ u16 handle_finalize_load(const u8 *apdu, u16 apdu_len,
         }
     }
     
-    // Step 3: Create module instance
-    printf("[LOAD] Step 3: Creating module...\n");
+    // Step 3: Register module in registry
+    printf("[LOAD] Step 3: Registering module in registry...\n");
     u8 module_id = vm->load_context.target_module_id;
-    GCOSModule *module = &vm->modules[module_id];
     
-    // Initialize module fields
-    memset(module, 0, sizeof(GCOSModule));
+    // Get registry entry
+    GCOSModuleRegistry *reg = &vm->module_registry[module_id];
     
-    module->module_id = module_id;
-    module->module_aid = vm->load_context.package_aid;
-    module->version = vm->load_context.package_version;
-    module->type = 0x00;  // Regular application module
-    module->state = MODULE_LOADED;
-    module->security_domain_id = vm->load_context.sd_id;
-    module->loaded = true;
-    module->initialized = false;
+    // Initialize module registry entry
+    memset(reg, 0, sizeof(GCOSModuleRegistry));
     
-    // Copy code/data to module (simplified - real impl would parse sections)
-    module->code = module->domain_data;  // Use domain_data as code storage for now
-    module->code_size = sef_len;
+    reg->module_id = module_id;
+    reg->is_loaded = true;
+    reg->module_aid = vm->load_context.package_aid;
+    reg->module_version = vm->load_context.package_version;
+    reg->state = MODULE_LOADED;
+    
+    // Set code base (simplified - real impl would parse sections)
+    reg->code_base = vm->load_context.buffer;  // Use buffer as code storage for now
+    reg->code_size = sef_len;
     
     // Copy imports
-    module->import_count = vm->load_context.import_count;
-    for (u8 i = 0; i < module->import_count; i++) {
-        module->imports[i] = vm->load_context.imports[i];
+    reg->import_count = vm->load_context.import_count;
+    for (u8 i = 0; i < reg->import_count; i++) {
+        reg->imports[i] = vm->load_context.imports[i];
     }
+    
+    // Initialize instance tracking
+    reg->instance_count = 0;
+    memset(reg->instance_ids, 0xFF, sizeof(reg->instance_ids));
     
     // Increment module count
     vm->module_count++;
     
-    printf("[LOAD] Module created successfully:\n");
+    printf("[LOAD] Module registered successfully:\n");
     printf("  Module ID: %u\n", module_id);
     printf("  AID: ");
-    for (int i = 0; i < module->module_aid.length; i++) {
-        printf("%02X", module->module_aid.aid[i]);
+    for (int i = 0; i < reg->module_aid.length; i++) {
+        printf("%02X", reg->module_aid.aid[i]);
     }
     printf("\n");
-    printf("  Version: 0x%08X\n", module->version);
-    printf("  Imports: %u\n", module->import_count);
-    printf("  Code Size: %u bytes\n", module->code_size);
+    printf("  Version: 0x%08X\n", reg->module_version);
+    printf("  Imports: %u\n", reg->import_count);
+    printf("  Code Size: %u bytes\n", reg->code_size);
     
     // Reset load context
     reset_load_context(vm);
