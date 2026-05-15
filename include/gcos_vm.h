@@ -320,6 +320,11 @@ typedef enum {
 #define GCOS_ERROR_APP_NOT_SELECTABLE ((GCOSResult)0x8003)
 #define GCOS_ERROR_CANNOT_DELETE_ISD ((GCOSResult)0x8004)
 
+/* Module Registry Error Codes (Phase 2) */
+#define GCOS_ERROR_MODULE_NOT_FOUND ((GCOSResult)0x8005)
+#define GCOS_ERROR_MODULE_IN_USE    ((GCOSResult)0x8006)
+#define GCOS_ERROR_OUT_OF_MEMORY    ((GCOSResult)0x8007)
+
 /* GCOSState 别名 */
 #define GCOS_VM_STATE_IDLE          GCOS_STATE_IDLE
 #define GCOS_VM_STATE_RUNNING       GCOS_STATE_RUNNING
