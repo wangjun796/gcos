@@ -154,14 +154,17 @@ static GCOSResult vm_instance_init(GCOSVM *vm) {
         return result;
     }
     
-    /* ⭐ RE-ENABLED: System objects initialization with detailed debugging */
-    SYS_OBJ_INFO("Initializing system objects...\n");
-    result = gcos_system_objects_init(vm);
-    if (result != GCOS_SUCCESS) {
-        SYS_OBJ_ERR("Failed to initialize system objects (error=%d)\n", result);
-        return result;
-    }
-    SYS_OBJ_INFO("System objects initialized successfully\n");
+    /* ⭐ TEMPORARILY DISABLED: System objects initialization (crash in eflash_mgr_alloc during GRT creation) */
+    /* Crash occurs at insert_node_to_table() when inserting remaining free space */
+    /* See exit_debug2.log for details - crash at logical_addr=0x00005B insertion */
+    // SYS_OBJ_INFO("Initializing system objects...\n");
+    // result = gcos_system_objects_init(vm);
+    // if (result != GCOS_SUCCESS) {
+    //     SYS_OBJ_ERR("Failed to initialize system objects (error=%d)\n", result);
+    //     return result;
+    // }
+    // SYS_OBJ_INFO("System objects initialized successfully\n");
+    printf("[VM_INIT] WARNING: System objects disabled (crash in eflash_mgr_alloc)\n");
     
     return GCOS_OK;
 }
@@ -454,10 +457,10 @@ GCOSResult gcos_vm_stack_push(GCOSVM *vm, u32 value) {
 }
 
 /**
- * @brief Allocate memory from heap (returns offset address)
+ * @brief Allocate memory from heap (returns 1-based offset address)
  * @param vm VM instance
  * @param size Allocation size
- * @return Offset address, 0 indicates failure
+ * @return 1-based offset address, 0 indicates failure
  * @note COS3 specification: Heap is non-volatile, requires eflash library integration
  */
 u32 gcos_vm_heap_alloc(GCOSVM *vm, u32 size) {
@@ -474,14 +477,14 @@ u32 gcos_vm_heap_alloc(GCOSVM *vm, u32 size) {
         return 0;
     }
     
-    /* Allocate and return offset address */
-    u32 addr = vm->runtime.heap_used;
+    /* Reserve offset 0 as the invalid-address sentinel expected by callers. */
+    u32 raw_offset = vm->runtime.heap_used;
     vm->runtime.heap_used += aligned_size;
     
     /* Clear allocated memory */
-    memset(&vm->runtime.heap[addr], 0, aligned_size);
+    memset(&vm->runtime.heap[raw_offset], 0, aligned_size);
     
-    return addr;
+    return raw_offset + 1;
 }
 
 /**

@@ -16,6 +16,9 @@
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_loader.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_flash_storage.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_transaction.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -29,6 +32,21 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_symbol_resolver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_module_registry.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_install_manager.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_delete_manager.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_system_objects.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_module_function_table.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_security.c">

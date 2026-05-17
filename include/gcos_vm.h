@@ -1324,10 +1324,10 @@ GCOSResult gcos_vm_stack_push(GCOSVM *vm, u32 value);
 GCOSResult gcos_vm_stack_pop(GCOSVM *vm, u32 *value);
 
 /**
- * @brief 堆分配（返回偏移地址）
+ * @brief 堆分配（返回从 1 开始的偏移地址）
  * @param vm VM指针
  * @param size 分配大小
- * @return 偏移地址，0表示失败
+ * @return 从 1 开始的偏移地址，0 表示失败
  */
 u32 gcos_vm_heap_alloc(GCOSVM *vm, u32 size);
 

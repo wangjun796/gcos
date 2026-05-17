@@ -313,11 +313,17 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_memory.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_instructions.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_loader.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_flash_storage.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_transaction.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_app_manager.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_load_manager.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_persistence.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_symbol_resolver.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_module_registry.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_install_manager.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_delete_manager.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_system_objects.c" />
+    <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_module_function_table.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_security.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_apdu.c" />
     <ClCompile Include="E:\views\gcos\prog\cos\gcos_vm\src\gcos_tlp.c" />

@@ -23,6 +23,12 @@
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_aid_prefix_match.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_app_delete_grt_cleanup.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_app_delete_simple.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_app_manager.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
@@ -32,10 +38,16 @@
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_basic.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_delete_command.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_gcos_vm_simple.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_generated_sef.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_install_command.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_jcshell_client.exe</FullPath>
@@ -45,6 +57,12 @@
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_load_command.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_load_module_registry.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_module_registry.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
       <FullPath>E:\views\gcos\prog\cos\gcos_vm\build_vs2022\Debug\test_persistence.exe</FullPath>

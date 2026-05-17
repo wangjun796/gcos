@@ -548,33 +548,68 @@ static GCOSResult gcos_create_app_instance_object(GCOSVM *vm) {
 static GCOSResult gcos_create_grt_object(GCOSVM *vm) {
     uint32_t logic_addr;
     obj_header_t hdr;
+    int ret;
+    
+    SYS_OBJ_INFO("Creating GRT (Obj ID 3)...\n");
     
     u32 size = sizeof(GCOS_GRTObject) + 
                (GCOS_DEFAULT_MAX_GRT - 1) * sizeof(GCOSGlobalRefEntry);
+    SYS_OBJ_DBG("  Calculated size: %u bytes\n", size);
+    SYS_OBJ_DBG("    Base struct: %u bytes\n", sizeof(GCOS_GRTObject));
+    SYS_OBJ_DBG("    Per entry: %u bytes x %u entries\n", 
+                sizeof(GCOSGlobalRefEntry), GCOS_DEFAULT_MAX_GRT);
     
-    if (eflash_mgr_alloc(size, &logic_addr) != 0) {
+    SYS_OBJ_DBG("  Calling eflash_mgr_alloc(size=%u)...\n", size);
+    ret = eflash_mgr_alloc(size, &logic_addr);
+    if (ret != 0) {
+        SYS_OBJ_ERR("Failed to allocate GRT (ret=%d)\n", ret);
+        return GCOS_ERROR_OUT_OF_MEMORY;
+    }
+    SYS_OBJ_DBG("  Allocated at logical_addr=0x%08X\n", logic_addr);
+    
+    SYS_OBJ_DBG("  Allocating memory for initialization...\n");
+    GCOS_GRTObject *obj = malloc(size);
+    if (obj == NULL) {
+        SYS_OBJ_ERR("malloc failed for size %u\n", size);
+        eflash_mgr_free(logic_addr, size);
         return GCOS_ERROR_OUT_OF_MEMORY;
     }
     
-    GCOS_GRTObject *obj = malloc(size);
     memset(obj, 0, size);
     obj->magic = GCOS_MAGIC_GRT0;
     obj->version = 0x0100;
     obj->capacity = GCOS_DEFAULT_MAX_GRT;
     obj->used_count = 0;
+    SYS_OBJ_DBG("  Initialized object in memory\n");
+    SYS_OBJ_DBG("    Magic: 0x%08X\n", obj->magic);
     
-    eflash_ftl_write_logical(logic_addr, (uint8_t *)obj, (int16_t)size);
+    SYS_OBJ_DBG("  Calling eflash_ftl_write_logical(addr=0x%08X, size=%d)...\n", 
+                logic_addr, (int)size);
+    ret = eflash_ftl_write_logical(logic_addr, (const uint8_t *)obj, (int16_t)size);
+    if (ret != 0) {
+        SYS_OBJ_ERR("Failed to write GRT (ret=%d)\n", ret);
+        free(obj);
+        return GCOS_ERROR_INVALID_PARAM;
+    }
+    SYS_OBJ_DBG("  Write successful\n");
     free(obj);
     
+    SYS_OBJ_DBG("  Setting object header...\n");
     memset(&hdr, 0, sizeof(hdr));
     hdr.pkg_id = GCOS_PKG_ID;
     hdr.class_id = GCOS_CLASS_GRT;
     hdr.type = OBJ_TYPE_NORMAL;
     hdr.body_addr = logic_addr;
     hdr.body_size = size;
-    eflash_ftl_obj_set_header(GCOS_OBJ_ID_GRT, &hdr);
     
-    printf("[SYS_OBJ]   GRT created at 0x%08X (size=%u)\n", logic_addr, size);
+    ret = eflash_ftl_obj_set_header(GCOS_OBJ_ID_GRT, &hdr);
+    if (ret != 0) {
+        SYS_OBJ_ERR("Failed to set header for Obj 3 (ret=%d)\n", ret);
+        return GCOS_ERROR_INVALID_PARAM;
+    }
+    SYS_OBJ_DBG("  Header set successfully\n");
+    
+    SYS_OBJ_INFO("  GRT created at 0x%08X (size=%u)\n", logic_addr, size);
     return GCOS_SUCCESS;
 }
 

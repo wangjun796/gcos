@@ -231,7 +231,7 @@ GCOSResult gcos_memory_clear_global_data(GCOSVM *vm) {
  * @brief Allocate memory from heap
  * @param vm VM instance
  * @param size Allocation size in bytes
- * @return Offset address, 0 indicates failure
+ * @return 1-based offset address, 0 indicates failure
  * 
  * @note COS3 specification: Heap is non-volatile, requires eflash library integration
  * @note Current implementation is a simplified linear allocator, full heap manager needed later
@@ -251,17 +251,17 @@ u32 gcos_memory_heap_alloc(GCOSVM *vm, u32 size) {
         return 0;
     }
     
-    /* Allocate and return offset address */
-    u32 addr = vm->runtime.heap_used;
+    /* Reserve offset 0 as an invalid-address sentinel. */
+    u32 raw_offset = vm->runtime.heap_used;
     vm->runtime.heap_used += aligned_size;
     
     /* Clear allocated memory */
-    memset(&vm->runtime.heap[addr], 0, aligned_size);
+    memset(&vm->runtime.heap[raw_offset], 0, aligned_size);
     
     GCOS_PRINTF("[GCOS Memory] Heap allocated: addr=%u, size=%u (aligned=%u)\n",
-           addr, size, aligned_size);
+           raw_offset + 1, size, aligned_size);
     
-    return addr;
+    return raw_offset + 1;
 }
 
 /**
@@ -298,15 +298,20 @@ GCOSResult gcos_memory_heap_read(const GCOSVM *vm, u32 addr, u8 *data, u32 size)
     if (vm == NULL || data == NULL) {
         return GCOS_ERROR_NULL_POINTER;
     }
+    if (addr == 0) {
+        return GCOS_ERROR_MEMORY_ACCESS;
+    }
+    
+    u32 raw_offset = addr - 1;
     
     /* Boundary check */
-    if (addr + size > GCOS_HEAP_SIZE) {
+    if (raw_offset + size > GCOS_HEAP_SIZE) {
         GCOS_PRINTF("[GCOS Memory] Heap read out of bounds: addr=%u, size=%u\n",
                addr, size);
         return GCOS_ERROR_MEMORY_ACCESS;
     }
     
-    memcpy(data, &vm->runtime.heap[addr], size);
+    memcpy(data, &vm->runtime.heap[raw_offset], size);
     return GCOS_SUCCESS;
 }
 
@@ -322,15 +327,20 @@ GCOSResult gcos_memory_heap_write(GCOSVM *vm, u32 addr, const u8 *data, u32 size
     if (vm == NULL || data == NULL) {
         return GCOS_ERROR_NULL_POINTER;
     }
+    if (addr == 0) {
+        return GCOS_ERROR_MEMORY_ACCESS;
+    }
+    
+    u32 raw_offset = addr - 1;
     
     /* Boundary check */
-    if (addr + size > GCOS_HEAP_SIZE) {
+    if (raw_offset + size > GCOS_HEAP_SIZE) {
         printf("[GCOS Memory] Heap write out of bounds: addr=%u, size=%u\n",
                addr, size);
         return GCOS_ERROR_MEMORY_ACCESS;
     }
     
-    memcpy(&vm->runtime.heap[addr], data, size);
+    memcpy(&vm->runtime.heap[raw_offset], data, size);
     return GCOS_SUCCESS;
 }
 

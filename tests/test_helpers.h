@@ -9,6 +9,7 @@
 #define TEST_HELPERS_H
 
 #include "gcos_vm.h"
+#include "gcos_app_manager.h"
 #include "eflash_sim.h"
 #include <stdio.h>
 #include <string.h>

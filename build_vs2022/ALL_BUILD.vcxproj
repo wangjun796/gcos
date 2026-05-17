@@ -206,6 +206,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{B04C8E4E-C9CD-3027-B1F7-75B3AE221048}</Project>
       <Name>test_aid_prefix_match</Name>
     </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_app_delete_grt_cleanup.vcxproj">
+      <Project>{6673DBE9-6B2F-32BC-A21C-A5BD2034870A}</Project>
+      <Name>test_app_delete_grt_cleanup</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_app_delete_simple.vcxproj">
+      <Project>{458CEBD0-6B15-3FCC-898A-B2D6FB18CB08}</Project>
+      <Name>test_app_delete_simple</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_app_manager.vcxproj">
       <Project>{1BAC2E50-8993-38A9-9B17-D338CC9CF600}</Project>
       <Name>test_app_manager</Name>
@@ -218,6 +226,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{40738874-3845-3CAE-8034-33B5D7E9A7B1}</Project>
       <Name>test_basic</Name>
     </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_delete_command.vcxproj">
+      <Project>{567EF470-28C3-3D8C-9784-E9CC76973BD3}</Project>
+      <Name>test_delete_command</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_gcos_vm_simple.vcxproj">
       <Project>{A1C3F789-BA14-3450-84FF-9C584507F16E}</Project>
       <Name>test_gcos_vm_simple</Name>
@@ -225,6 +237,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_generated_sef.vcxproj">
       <Project>{A9EB5402-6AE3-35EC-9FF7-F4FF1F642E41}</Project>
       <Name>test_generated_sef</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_install_command.vcxproj">
+      <Project>{C13F9AF7-E770-3994-929E-6FC33F7CFE25}</Project>
+      <Name>test_install_command</Name>
     </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_jcshell_client.vcxproj">
       <Project>{983DE19E-AB14-332F-8390-491B5305A0E4}</Project>
@@ -237,6 +253,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_load_command.vcxproj">
       <Project>{2EAF7AEF-6F61-3790-8999-DEB2375A226A}</Project>
       <Name>test_load_command</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_load_module_registry.vcxproj">
+      <Project>{25EDD83F-E807-3B11-88C0-5E7573119278}</Project>
+      <Name>test_load_module_registry</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_module_registry.vcxproj">
+      <Project>{552190AD-11BC-360E-87CE-46D8208C36E4}</Project>
+      <Name>test_module_registry</Name>
     </ProjectReference>
     <ProjectReference Include="E:\views\gcos\prog\cos\gcos_vm\build_vs2022\test_persistence.vcxproj">
       <Project>{E8A01FC8-ADC7-37D4-84BF-F03D1462C442}</Project>
