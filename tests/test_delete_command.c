@@ -13,12 +13,10 @@
  * @date 2026-05-09
  */
 
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_module_registry.h"
 #include "gcos_install_manager.h"
 #include "gcos_delete_manager.h"
-#include <stdio.h>
-#include <string.h>
 
 /* Helper macro for test results */
 #define TEST_ASSERT(condition, message) \
@@ -154,11 +152,9 @@ int main(void) {
     printf("GCOS DELETE Command Test (Phase 5)\n");
     printf("========================================\n\n");
     
-    GCOSVM *vm = gcos_vm_create();
-    TEST_ASSERT(vm != NULL, "VM created");
-    
-    GCOSResult result = gcos_vm_init(vm);
-    TEST_ASSERT(result == GCOS_SUCCESS, "VM initialized");
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
+    TEST_ASSERT(vm != NULL && result == GCOS_SUCCESS, "VM created and initialized");
     
     /* ========================================================================
      * Step 1: Load a module

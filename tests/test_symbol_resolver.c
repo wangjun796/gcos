@@ -9,10 +9,7 @@
  * - Cross-module symbol resolution
  */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_symbol_resolver.h"
 
 /* ============================================================================
@@ -224,14 +221,13 @@ int main(void) {
     printf("GCOS Symbol Resolution Test Suite\n");
     printf("========================================\n");
     
-    /* Create and initialize VM */
-    GCOSVM *vm = gcos_vm_create();
-    if (!vm) {
-        printf("✗ FAILED: Cannot create VM\n");
+    /* Create and initialize VM with eflash */
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
+    if (!vm || result != GCOS_SUCCESS) {
+        printf("✗ FAILED: Cannot create and initialize VM\n");
         return 1;
     }
-    
-    gcos_vm_init(vm);
     
     /* Initialize symbol resolver */
     gcos_symbol_resolver_init(vm);

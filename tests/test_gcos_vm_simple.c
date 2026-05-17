@@ -3,21 +3,21 @@
  * @brief GCOS VM 简单测试 - 验证零动态内存分配和基础API
  */
 
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_platform.h"
-#include <string.h>
 
 int main(void) {
     GCOS_PRINTF("========== GCOS VM Simple Test ==========\n\n");
     
     /* 测试1: 创建VM实例 */
     GCOS_PRINTF("[Test 1] Creating VM instance...\n");
-    GCOSVM *vm = gcos_vm_create();
-    if (vm == NULL) {
-        GCOS_PRINTF("FAILED: Could not create VM\n");
+    GCOSVM *vm = NULL;
+    GCOSResult ret = test_vm_create_and_init(&vm);
+    if (vm == NULL || ret != GCOS_SUCCESS) {
+        GCOS_PRINTF("FAILED: Could not create and initialize VM\n");
         return 1;
     }
-    GCOS_PRINTF("PASSED: VM created at address %p\n", (void*)vm);
+    GCOS_PRINTF("PASSED: VM created and initialized at address %p\n", (void*)vm);
     
     /* 测试2: 检查版本信息 */
     GCOS_PRINTF("\n[Test 2] Checking version info...\n");

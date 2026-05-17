@@ -12,10 +12,8 @@
  * @date 2026-05-09
  */
 
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_module_registry.h"
-#include <stdio.h>
-#include <string.h>
 
 /* Helper macro for test results */
 #define TEST_ASSERT(condition, message) \
@@ -80,13 +78,10 @@ int main(void) {
     printf("GCOS LOAD Command + Module Registry Test\n");
     printf("========================================\n\n");
     
-    /* Create VM instance */
-    GCOSVM *vm = gcos_vm_create();
-    TEST_ASSERT(vm != NULL, "VM created successfully");
-    
-    /* Initialize VM */
-    GCOSResult result = gcos_vm_init(vm);
-    TEST_ASSERT(result == GCOS_SUCCESS, "VM initialized successfully");
+    /* Create VM instance with eflash */
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
+    TEST_ASSERT(vm != NULL && result == GCOS_SUCCESS, "VM created and initialized successfully");
     
     /* ========================================================================
      * Test 1: INSTALL FOR LOAD (Phase 1)

@@ -441,6 +441,7 @@ typedef struct GCOSModuleRegistry {
     /* Function table */
     u16 function_count;             /* Number of functions */
     const void *functions;          /* Function headers (type depends on implementation) */
+    u32 function_table_addr;        /* Logical address of function table in Flash */
     
     /* Export table */
     u16 export_count;               /* Number of exported symbols */
@@ -457,6 +458,7 @@ typedef struct GCOSModuleRegistry {
     /* Global data template (copied to each instance) */
     const u8 *global_data_template; /* Read-only template */
     u32 global_data_size;           /* Template size */
+    u32 global_data_addr;           /* Logical address of global data in Flash */
     
     /* Module state */
     GCOSModuleState state;          /* LOADED/VERIFIED/ERROR */
@@ -1029,6 +1031,10 @@ struct GCOSVM {
     
     /* ⭐ NEW: LOAD command context (for multi-APDU loading) */
     GCOSLoadContext load_context;   /* LOAD state machine context */
+    
+    /* ⭐ NEW: System Configuration Object (Flash persistence via eflash objects) */
+    struct GCOS_SystemConfigObject *system_config;  /* Pointer to System Config object (Obj ID 5) */
+    u32 flash_size;                 /* Total Flash size in bytes */
     
     /* 应用管理 */
     GCOSAppInstance apps[MAX_APPS];     /* 应用实例数组（静态分配）*/

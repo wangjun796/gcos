@@ -5,10 +5,8 @@
  * Uses the real SEF file from COS3 Appendix F.1 (Table F.1)
  */
 
-#include <stdio.h>
-#include <string.h>
+#include "test_helpers.h"
 #include <stdint.h>
-#include "gcos_vm.h"
 
 /* ============================================================================
  * Little-Endian Read Helpers (per COS3 Specification Section 7.1.2)
@@ -124,20 +122,14 @@ static const uint8_t cos3_sef_example[] = {
 static int test_cos3_sef_load(void) {
     printf("\n=== Test: COS3 Specification SEF File Loading ===\n");
     
-    /* Create and initialize VM */
-    GCOSVM *vm = gcos_vm_create();
-    if (!vm) {
-        printf("✗ FAILED: Could not create VM\n");
+    /* Create and initialize VM with eflash */
+    GCOSVM *vm = NULL;
+    GCOSResult ret = test_vm_create_and_init(&vm);
+    if (!vm || ret != GCOS_SUCCESS) {
+        printf("✗ FAILED: Could not create and initialize VM\n");
         return 1;
     }
-    printf("✓ VM created\n");
-    
-    GCOSResult ret = gcos_vm_init(vm);
-    if (ret != GCOS_OK) {
-        printf("✗ FAILED: VM initialization failed (%d)\n", ret);
-        gcos_vm_destroy(vm);
-        return 1;
-    }
+    printf("✓ VM created and initialized\n");
     printf("✓ VM initialized\n");
     
     /* Print SEF file info */

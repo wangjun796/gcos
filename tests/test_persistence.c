@@ -10,9 +10,7 @@
  * - List persisted modules
  */
 
-#include <stdio.h>
-#include <string.h>
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_persistence.h"
 
 /* Test helper macros */
@@ -35,11 +33,9 @@
 static int test_persist_init(void) {
     TEST_SECTION("Test 1: Persistence Initialization");
     
-    GCOSVM *vm = gcos_vm_create();
-    TEST_ASSERT(vm != NULL, "VM created");
-    
-    GCOSResult ret = gcos_vm_init(vm);
-    TEST_ASSERT(ret == GCOS_OK, "VM initialized");
+    GCOSVM *vm = NULL;
+    GCOSResult ret = test_vm_create_and_init(&vm);
+    TEST_ASSERT(vm != NULL && ret == GCOS_SUCCESS, "VM created and initialized");
     
     /* Initialize persistence layer */
     int persist_ret = gcos_persist_init(vm);

@@ -3,11 +3,8 @@
  * @brief Test loading the generated COS3-compliant SEF file
  */
 
-#include <stdio.h>
-#include <stdint.h>
+#include "test_helpers.h"
 #include <stdlib.h>  /* for malloc/free */
-#include <string.h>
-#include "gcos_vm.h"
 
 int main(void) {
     GCOSVM *vm;
@@ -17,22 +14,14 @@ int main(void) {
     printf("Test: Loading Generated COS3 SEF File\n");
     printf("========================================\n\n");
     
-    /* Create VM */
-    vm = gcos_vm_create();
-    if (!vm) {
-        printf("✗ FAILED: Cannot create VM\n");
+    /* Create and initialize VM with eflash */
+    vm = NULL;
+    ret = test_vm_create_and_init(&vm);
+    if (!vm || ret != GCOS_SUCCESS) {
+        printf("✗ FAILED: Cannot create and initialize VM\n");
         return 1;
     }
-    printf("✓ VM created\n\n");
-    
-    /* Initialize VM */
-    ret = gcos_vm_init(vm);
-    if (ret != GCOS_SUCCESS) {
-        printf("✗ FAILED: VM initialization failed (ret=%d)\n", ret);
-        gcos_vm_destroy(vm);
-        return 1;
-    }
-    printf("✓ VM initialized\n\n");
+    printf("✓ VM created and initialized\n\n");
     
     /* Load SEF file */
     const char *sef_filename = "test_module.sef";

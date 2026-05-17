@@ -118,6 +118,104 @@
 #endif
 
 /* ============================================================================
+ * 调试等级定义
+ * ============================================================================ */
+
+/* Debug levels for system objects and eflash operations */
+#define GCOS_DEBUG_LEVEL_NONE     0   /* No debug output */
+#define GCOS_DEBUG_LEVEL_ERROR    1   /* Only errors */
+#define GCOS_DEBUG_LEVEL_WARN     2   /* Warnings + errors */
+#define GCOS_DEBUG_LEVEL_INFO     3   /* Info + warnings + errors */
+#define GCOS_DEBUG_LEVEL_DEBUG    4   /* All debug messages */
+#define GCOS_DEBUG_LEVEL_TRACE    5   /* Trace level (very verbose) */
+
+/* Default debug level - can be overridden in CMakeLists.txt or command line */
+#ifndef GCOS_SYSTEM_OBJ_DEBUG_LEVEL
+    #define GCOS_SYSTEM_OBJ_DEBUG_LEVEL  GCOS_DEBUG_LEVEL_INFO
+#endif
+
+#ifndef GCOS_EFLASH_DEBUG_LEVEL
+    #define GCOS_EFLASH_DEBUG_LEVEL      GCOS_DEBUG_LEVEL_INFO
+#endif
+
+/* Debug macros with level control */
+#if GCOS_ENABLE_DEBUG && GCOS_HAS_STDIO
+    /* System object debug macros */
+    #if GCOS_SYSTEM_OBJ_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_ERROR
+        #define SYS_OBJ_ERR(fmt, ...)    printf("[SYS_OBJ_ERR] " fmt, ##__VA_ARGS__)
+    #else
+        #define SYS_OBJ_ERR(fmt, ...)    ((void)0)
+    #endif
+    
+    #if GCOS_SYSTEM_OBJ_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_WARN
+        #define SYS_OBJ_WARN(fmt, ...)   printf("[SYS_OBJ_WARN] " fmt, ##__VA_ARGS__)
+    #else
+        #define SYS_OBJ_WARN(fmt, ...)   ((void)0)
+    #endif
+    
+    #if GCOS_SYSTEM_OBJ_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_INFO
+        #define SYS_OBJ_INFO(fmt, ...)   printf("[SYS_OBJ] " fmt, ##__VA_ARGS__)
+    #else
+        #define SYS_OBJ_INFO(fmt, ...)   ((void)0)
+    #endif
+    
+    #if GCOS_SYSTEM_OBJ_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_DEBUG
+        #define SYS_OBJ_DBG(fmt, ...)    printf("[SYS_OBJ_DBG] " fmt, ##__VA_ARGS__)
+    #else
+        #define SYS_OBJ_DBG(fmt, ...)    ((void)0)
+    #endif
+    
+    #if GCOS_SYSTEM_OBJ_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_TRACE
+        #define SYS_OBJ_TRACE(fmt, ...)  printf("[SYS_OBJ_TRACE] " fmt, ##__VA_ARGS__)
+    #else
+        #define SYS_OBJ_TRACE(fmt, ...)  ((void)0)
+    #endif
+    
+    /* Eflash operation debug macros */
+    #if GCOS_EFLASH_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_ERROR
+        #define EFLASH_ERR(fmt, ...)     printf("[EFLASH_ERR] " fmt, ##__VA_ARGS__)
+    #else
+        #define EFLASH_ERR(fmt, ...)     ((void)0)
+    #endif
+    
+    #if GCOS_EFLASH_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_WARN
+        #define EFLASH_WARN(fmt, ...)    printf("[EFLASH_WARN] " fmt, ##__VA_ARGS__)
+    #else
+        #define EFLASH_WARN(fmt, ...)    ((void)0)
+    #endif
+    
+    #if GCOS_EFLASH_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_INFO
+        #define EFLASH_INFO(fmt, ...)    printf("[EFLASH] " fmt, ##__VA_ARGS__)
+    #else
+        #define EFLASH_INFO(fmt, ...)    ((void)0)
+    #endif
+    
+    #if GCOS_EFLASH_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_DEBUG
+        #define EFLASH_DBG(fmt, ...)     printf("[EFLASH_DBG] " fmt, ##__VA_ARGS__)
+    #else
+        #define EFLASH_DBG(fmt, ...)     ((void)0)
+    #endif
+    
+    #if GCOS_EFLASH_DEBUG_LEVEL >= GCOS_DEBUG_LEVEL_TRACE
+        #define EFLASH_TRACE(fmt, ...)   printf("[EFLASH_TRACE] " fmt, ##__VA_ARGS__)
+    #else
+        #define EFLASH_TRACE(fmt, ...)   ((void)0)
+    #endif
+#else
+    /* Debug disabled - all macros are no-ops */
+    #define SYS_OBJ_ERR(fmt, ...)    ((void)0)
+    #define SYS_OBJ_WARN(fmt, ...)   ((void)0)
+    #define SYS_OBJ_INFO(fmt, ...)   ((void)0)
+    #define SYS_OBJ_DBG(fmt, ...)    ((void)0)
+    #define SYS_OBJ_TRACE(fmt, ...)  ((void)0)
+    #define EFLASH_ERR(fmt, ...)     ((void)0)
+    #define EFLASH_WARN(fmt, ...)    ((void)0)
+    #define EFLASH_INFO(fmt, ...)    ((void)0)
+    #define EFLASH_DBG(fmt, ...)     ((void)0)
+    #define EFLASH_TRACE(fmt, ...)   ((void)0)
+#endif
+
+/* ============================================================================
  * 统一API定义
  * ============================================================================ */
 

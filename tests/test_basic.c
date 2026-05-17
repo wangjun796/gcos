@@ -1,17 +1,18 @@
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_platform.h"
 
 int main(void) {
     GCOS_PRINTF("GCOS VM Basic Test\n");
     GCOS_PRINTF("==================\n\n");
     
-    // 创建VM
-    GCOSVM *vm = gcos_vm_create();
-    if (vm == NULL) {
-        GCOS_PRINTF("FAILED: Cannot create VM\n");
+    /* Create and initialize VM with eflash */
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
+    if (result != GCOS_SUCCESS || vm == NULL) {
+        GCOS_PRINTF("FAILED: Cannot create and initialize VM\n");
         return 1;
     }
-    GCOS_PRINTF("[PASS] VM created\n");
+    GCOS_PRINTF("[PASS] VM created and initialized\n");
     
     // 检查版本
     GCOS_PRINTF("Version: %d.%d.%d\n", vm->version.major, vm->version.minor, vm->version.patch);

@@ -13,10 +13,8 @@
  * @date 2026-05-09
  */
 
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_module_registry.h"
-#include <stdio.h>
-#include <string.h>
 
 /* Helper macro for test results */
 #define TEST_ASSERT(condition, message) \
@@ -34,13 +32,10 @@ int main(void) {
     printf("GCOS Module Registry Test\n");
     printf("========================================\n\n");
     
-    /* Create VM instance */
-    GCOSVM *vm = gcos_vm_create();
-    TEST_ASSERT(vm != NULL, "VM created");
-    
-    /* Initialize VM */
-    GCOSResult ret = gcos_vm_init(vm);
-    TEST_ASSERT(ret == GCOS_SUCCESS, "VM initialized");
+    /* Create VM instance with eflash */
+    GCOSVM *vm = NULL;
+    GCOSResult ret = test_vm_create_and_init(&vm);
+    TEST_ASSERT(vm != NULL && ret == GCOS_SUCCESS, "VM created and initialized");
     
     /* Initialize module registry */
     ret = module_registry_init(vm);

@@ -3,20 +3,18 @@
  * @brief Simple test for app_delete with GRT cleanup
  */
 
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_module_registry.h"
-#include <stdio.h>
 
 int main(void) {
     printf("=== Simple App Delete Test ===\n\n");
     
-    GCOSVM *vm = gcos_vm_create();
-    if (!vm) {
-        printf("Failed to create VM\n");
+    GCOSVM *vm = NULL;
+    GCOSResult ret = test_vm_create_and_init(&vm);
+    if (!vm || ret != GCOS_SUCCESS) {
+        printf("Failed to create and initialize VM\n");
         return 1;
     }
-    
-    gcos_vm_init(vm);
     printf("VM initialized. Apps: %u\n", vm->app_count);
     
     // Create a dummy app (not through INSTALL, just for testing delete)

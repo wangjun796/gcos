@@ -15,6 +15,7 @@
 #include "gcos_vm.h"
 #include "gcos_platform.h"
 #include "gcos_app_manager.h"  // ⭐ Application manager
+#include "gcos_system_objects.h"  // ⭐ System objects management (Flash persistence)
 #include <string.h>
 
 /* ============================================================================
@@ -153,6 +154,15 @@ static GCOSResult vm_instance_init(GCOSVM *vm) {
         return result;
     }
     
+    /* ⭐ RE-ENABLED: System objects initialization with detailed debugging */
+    SYS_OBJ_INFO("Initializing system objects...\n");
+    result = gcos_system_objects_init(vm);
+    if (result != GCOS_SUCCESS) {
+        SYS_OBJ_ERR("Failed to initialize system objects (error=%d)\n", result);
+        return result;
+    }
+    SYS_OBJ_INFO("System objects initialized successfully\n");
+    
     return GCOS_OK;
 }
 
@@ -185,6 +195,11 @@ GCOSResult gcos_vm_destroy(GCOSVM *vm) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
+    printf("[VM_DESTROY] === Starting VM Destruction ===\n");
+    printf("[VM_DESTROY] VM pointer: %p\n", (void*)vm);
+    printf("[VM_DESTROY] Is global instance: %s\n", (vm == &g_gcos_vm_instance) ? "YES" : "NO");
+    fflush(stdout);
+    
     /* Check if this is the global instance */
     if (vm != &g_gcos_vm_instance) {
         GCOS_PRINTF("[GCOS VM] Error: Invalid VM instance pointer\n");
@@ -195,6 +210,15 @@ GCOSResult gcos_vm_destroy(GCOSVM *vm) {
     if (vm->state == GCOS_STATE_RUNNING) {
         vm->state = GCOS_STATE_IDLE;
     }
+    printf("[VM_DESTROY] VM state set to IDLE\n");
+    fflush(stdout);
+    
+    /* ⭐ TEMPORARILY DISABLED: Save system objects (debugging crash) */
+    // GCOSResult result = gcos_system_objects_save(vm);
+    // if (result != GCOS_SUCCESS) {
+    //     printf("[VM_DESTROY] WARNING: Failed to save system objects (error=%d)\n", result);
+    //     /* Continue with destruction even if save fails */
+    // }
     
     /* Clean up transaction backup data (if any) */
     if (vm->transaction.backup_data != NULL) {
@@ -203,12 +227,23 @@ GCOSResult gcos_vm_destroy(GCOSVM *vm) {
         vm->transaction.backup_data = NULL;
         vm->transaction.backup_size = 0;
     }
+    printf("[VM_DESTROY] Transaction cleanup done\n");
+    fflush(stdout);
     
     /* Reset instance but do not release memory (statically allocated) */
+    printf("[VM_DESTROY] Calling vm_instance_init() to reset...\n");
+    fflush(stdout);
     vm_instance_init(vm);
+    printf("[VM_DESTROY] vm_instance_init() returned\n");
+    fflush(stdout);
+    
     g_vm_initialized = false;
+    printf("[VM_DESTROY] g_vm_initialized set to false\n");
+    fflush(stdout);
     
     GCOS_PRINTF("[GCOS VM] VM destroyed (memory retained for reuse)\n");
+    printf("[VM_DESTROY] === VM Destruction Complete ===\n");
+    fflush(stdout);
     return GCOS_OK;
 }
 
@@ -217,16 +252,18 @@ GCOSResult gcos_vm_init(GCOSVM *vm) {
         return GCOS_ERR_INVALID_PARAM;
     }
     
-    /* If not created, create first */
-    if (!g_vm_initialized) {
-        if (gcos_vm_create() == NULL) {
-            return GCOS_ERR_OUT_OF_MEMORY;
-        }
+    /* If already initialized, just return success (don't re-initialize) */
+    if (g_vm_initialized) {
+        GCOS_PRINTF("[GCOS VM] Warning: VM already initialized, skipping re-initialization\n");
         return GCOS_OK;
     }
     
-    /* If already initialized, reset first */
-    return gcos_vm_reset(vm);
+    /* If not created, create first */
+    if (gcos_vm_create() == NULL) {
+        return GCOS_ERR_OUT_OF_MEMORY;
+    }
+    
+    return GCOS_OK;
 }
 
 GCOSResult gcos_vm_reset(GCOSVM *vm) {

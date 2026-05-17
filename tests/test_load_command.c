@@ -3,9 +3,7 @@
  * @brief Test LOAD command three-phase state machine
  */
 
-#include <stdio.h>
-#include <string.h>
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_app_manager.h"
 
 /* Helper function to print status word */
@@ -225,10 +223,11 @@ int main(void) {
     printf("  GCOS LOAD Command Test\n");
     printf("========================================\n");
     
-    // Initialize VM
-    GCOSVM *vm = gcos_vm_create();
-    if (!vm) {
-        printf("ERROR: Failed to create VM\n");
+    // Initialize VM with eflash
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
+    if (!vm || result != GCOS_SUCCESS) {
+        printf("ERROR: Failed to create and initialize VM\n");
         return 1;
     }
     

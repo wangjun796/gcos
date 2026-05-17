@@ -3,9 +3,8 @@
  * @brief Test application manager functionality
  */
 
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_app_manager.h"
-#include <stdio.h>
 
 /* Test app process function */
 static u16 test_app_process(GCOSAppInstance *app,
@@ -29,16 +28,11 @@ int main(void) {
     printf("  GCOS VM Application Manager Test\n");
     printf("========================================\n\n");
     
-    /* Create and initialize VM */
-    GCOSVM *vm = gcos_vm_create();
-    if (vm == NULL) {
-        printf("[ERROR] Failed to create VM\n");
-        return 1;
-    }
-    
-    GCOSResult result = gcos_vm_init(vm);
-    if (result != GCOS_SUCCESS) {
-        printf("[ERROR] VM initialization failed: %d\n", result);
+    /* Create and initialize VM with eflash */
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
+    if (result != GCOS_SUCCESS || vm == NULL) {
+        printf("[ERROR] Failed to create and initialize VM\n");
         return 1;
     }
     

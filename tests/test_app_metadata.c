@@ -3,9 +3,7 @@
  * @brief Test application metadata fields (type, privileges, security domain)
  */
 
-#include <stdio.h>
-#include <string.h>
-#include "gcos_vm.h"
+#include "test_helpers.h"
 #include "gcos_app_manager.h"
 #include "gcos_apdu.h"
 
@@ -38,12 +36,12 @@ int main(void) {
     printf("  GCOS VM Application Metadata Test\n");
     printf("========================================\n\n");
     
-    // Create and initialize VM
-    GCOSVM *vm = gcos_vm_create();
-    GCOSResult result = gcos_vm_init(vm);
+    // Create and initialize VM with eflash
+    GCOSVM *vm = NULL;
+    GCOSResult result = test_vm_create_and_init(&vm);
     
-    if (result != GCOS_SUCCESS) {
-        printf("[TEST] ERROR: VM initialization failed: %d\n", result);
+    if (result != GCOS_SUCCESS || vm == NULL) {
+        printf("[TEST] ERROR: VM initialization failed\n");
         return 1;
     }
     
