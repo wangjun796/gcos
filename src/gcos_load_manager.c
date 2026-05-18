@@ -17,6 +17,206 @@
 #include <string.h>
 
 /* ============================================================================
+ * Transaction Management Functions
+ * ============================================================================ */
+
+/**
+ * @brief Initialize transaction context
+ * 
+ * @param tx_ctx Transaction context to initialize
+ */
+static void tx_init(GCOSTransactionContext *tx_ctx) {
+    memset(tx_ctx, 0, sizeof(GCOSTransactionContext));
+    tx_ctx->in_transaction = false;
+    tx_ctx->needs_rollback = false;
+    tx_ctx->log_count = 0;
+}
+
+/**
+ * @brief Begin a new transaction
+ * 
+ * @param tx_ctx Transaction context
+ */
+static void tx_begin(GCOSTransactionContext *tx_ctx) {
+    tx_init(tx_ctx);
+    tx_ctx->in_transaction = true;
+    printf("[TX] Transaction started\n");
+}
+
+/**
+ * @brief Log a Flash allocation operation
+ * 
+ * @param tx_ctx Transaction context
+ * @param flash_offset Allocated Flash offset
+ * @param flash_size Allocated size
+ * @return true if logged successfully
+ */
+static bool tx_log_flash_alloc(GCOSTransactionContext *tx_ctx, u32 flash_offset, u32 flash_size) {
+    if (!tx_ctx->in_transaction || tx_ctx->log_count >= MAX_TX_LOG_ENTRIES) {
+        return false;
+    }
+    
+    GCOSTxLogEntry *entry = &tx_ctx->logs[tx_ctx->log_count];
+    entry->type = TX_LOG_FLASH_ALLOC;
+    entry->executed = true;
+    entry->data.flash_alloc.flash_offset = flash_offset;
+    entry->data.flash_alloc.flash_size = flash_size;
+    tx_ctx->log_count++;
+    
+    printf("[TX] Logged Flash alloc: offset=0x%08X, size=%u\n", flash_offset, flash_size);
+    return true;
+}
+
+/**
+ * @brief Log a module registry update
+ * 
+ * @param tx_ctx Transaction context
+ * @param vm VM instance
+ * @param module_id Modified module ID
+ * @return true if logged successfully
+ */
+static bool tx_log_registry_update(GCOSTransactionContext *tx_ctx, GCOSVM *vm, u8 module_id) {
+    if (!tx_ctx->in_transaction || tx_ctx->log_count >= MAX_TX_LOG_ENTRIES) {
+        return false;
+    }
+    
+    GCOSTxLogEntry *entry = &tx_ctx->logs[tx_ctx->log_count];
+    entry->type = TX_LOG_MODULE_REGISTRY_UPDATE;
+    entry->executed = true;
+    entry->data.registry_update.module_id = module_id;
+    entry->data.registry_update.old_state = vm->module_registry[module_id];
+    entry->data.registry_update.was_loaded = vm->module_registry[module_id].is_loaded;
+    tx_ctx->log_count++;
+    
+    printf("[TX] Logged registry update: module_id=%u, was_loaded=%d\n", 
+           module_id, entry->data.registry_update.was_loaded);
+    return true;
+}
+
+/**
+ * @brief Log VM state changes
+ * 
+ * @param tx_ctx Transaction context
+ * @param vm VM instance
+ * @return true if logged successfully
+ */
+static bool tx_log_vm_state(GCOSTransactionContext *tx_ctx, GCOSVM *vm) {
+    if (!tx_ctx->in_transaction || tx_ctx->log_count >= MAX_TX_LOG_ENTRIES) {
+        return false;
+    }
+    
+    GCOSTxLogEntry *entry = &tx_ctx->logs[tx_ctx->log_count];
+    entry->type = TX_LOG_VM_STATE_CHANGE;
+    entry->executed = true;
+    entry->data.vm_state.old_module_count = vm->module_count;
+    entry->data.vm_state.old_app_count = vm->app_count;
+    tx_ctx->log_count++;
+    
+    printf("[TX] Logged VM state: module_count=%u, app_count=%u\n",
+           vm->module_count, vm->app_count);
+    return true;
+}
+
+/**
+ * @brief Log persistence save operation
+ * 
+ * @param tx_ctx Transaction context
+ * @param module_id Module ID whose metadata was saved
+ * @return true if logged successfully
+ */
+static bool tx_log_persistence(GCOSTransactionContext *tx_ctx, u8 module_id) {
+    if (!tx_ctx->in_transaction || tx_ctx->log_count >= MAX_TX_LOG_ENTRIES) {
+        return false;
+    }
+    
+    GCOSTxLogEntry *entry = &tx_ctx->logs[tx_ctx->log_count];
+    entry->type = TX_LOG_PERSISTENCE_SAVE;
+    entry->executed = true;
+    entry->data.persistence.module_id = module_id;
+    tx_ctx->log_count++;
+    
+    printf("[TX] Logged persistence save: module_id=%u\n", module_id);
+    return true;
+}
+
+/**
+ * @brief Rollback all logged operations in reverse order
+ * 
+ * @param tx_ctx Transaction context
+ * @param vm VM instance
+ */
+static void tx_rollback(GCOSTransactionContext *tx_ctx, GCOSVM *vm) {
+    if (!tx_ctx->in_transaction) {
+        return;
+    }
+    
+    printf("[TX] === Starting Rollback (%u operations) ===\n", tx_ctx->log_count);
+    
+    /* Rollback in reverse order (LIFO) */
+    for (int i = tx_ctx->log_count - 1; i >= 0; i--) {
+        GCOSTxLogEntry *entry = &tx_ctx->logs[i];
+        
+        if (!entry->executed) {
+            continue;
+        }
+        
+        switch (entry->type) {
+            case TX_LOG_FLASH_ALLOC:
+                /* Free allocated Flash space */
+                printf("[TX] Rolling back Flash alloc: offset=0x%08X\n",
+                       entry->data.flash_alloc.flash_offset);
+                gcos_flash_free_sef_space(entry->data.flash_alloc.flash_offset);
+                break;
+                
+            case TX_LOG_MODULE_REGISTRY_UPDATE:
+                /* Restore previous registry state */
+                printf("[TX] Rolling back registry update: module_id=%u\n",
+                       entry->data.registry_update.module_id);
+                vm->module_registry[entry->data.registry_update.module_id] = 
+                    entry->data.registry_update.old_state;
+                break;
+                
+            case TX_LOG_VM_STATE_CHANGE:
+                /* Restore previous VM state */
+                printf("[TX] Rolling back VM state\n");
+                vm->module_count = entry->data.vm_state.old_module_count;
+                vm->app_count = entry->data.vm_state.old_app_count;
+                break;
+                
+            case TX_LOG_PERSISTENCE_SAVE:
+                /* Cannot rollback Flash writes - they are permanent */
+                /* In production, would need versioning or journaling */
+                printf("[TX] WARNING: Cannot rollback persistence save (module_id=%u)\n",
+                       entry->data.persistence.module_id);
+                printf("[TX] Metadata may be stale but will be overwritten on next load\n");
+                break;
+                
+            default:
+                printf("[TX] WARNING: Unknown log type %d\n", entry->type);
+                break;
+        }
+    }
+    
+    /* Reset transaction context */
+    tx_init(tx_ctx);
+    printf("[TX] === Rollback Complete ===\n");
+}
+
+/**
+ * @brief Commit transaction (clear logs)
+ * 
+ * @param tx_ctx Transaction context
+ */
+static void tx_commit(GCOSTransactionContext *tx_ctx) {
+    if (!tx_ctx->in_transaction) {
+        return;
+    }
+    
+    printf("[TX] Transaction committed (%u operations)\n", tx_ctx->log_count);
+    tx_init(tx_ctx);
+}
+
+/* ============================================================================
  * Internal Helper Functions
  * ============================================================================ */
 
@@ -109,15 +309,20 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
     
     printf("[LOAD] === INSTALL FOR LOAD ===\n");
     
+    // Begin transaction
+    tx_begin(&vm->load_context.tx_ctx);
+    
     // Check if another channel has active load session
     if (check_cross_channel_conflict(vm, vm->current_channel)) {
         printf("[LOAD] ERROR: Another channel has active load session\n");
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6985;  // SW_CONDITIONS_NOT_SATISFIED
     }
     
     // Parse TLV data from APDU
     if (apdu_len < 5) {
         printf("[LOAD] ERROR: No data provided\n");
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A80;  // SW_WRONG_DATA
     }
     
@@ -136,12 +341,14 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
         if (tag == 0x4F) {
             // Package AID
             if (offset >= data_len) {
+                tx_rollback(&vm->load_context.tx_ctx, vm);
                 return 0x6A80;
             }
             u8 aid_len = data[offset++];
             
             if (aid_len < 5 || aid_len > 16 || offset + aid_len > data_len) {
                 printf("[LOAD] ERROR: Invalid AID length %u\n", aid_len);
+                tx_rollback(&vm->load_context.tx_ctx, vm);
                 return 0x6A80;
             }
             
@@ -162,6 +369,7 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
             
         } else {
             printf("[LOAD] WARNING: Unknown tag 0x%02X\n", tag);
+            tx_rollback(&vm->load_context.tx_ctx, vm);
             return 0x6A80;
         }
     }
@@ -169,12 +377,14 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
     // Validate Package AID
     if (pkg_aid.length == 0) {
         printf("[LOAD] ERROR: Package AID not provided\n");
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A80;
     }
     
     // Check for duplicate package
     if (module_aid_exists(vm, &pkg_aid)) {
         printf("[LOAD] ERROR: Package AID already exists\n");
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A89;  // SW_FILE_ALREADY_EXISTS
     }
     
@@ -182,6 +392,7 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
     u8 module_id = find_free_module_slot(vm);
     if (module_id == 0xFF) {
         printf("[LOAD] ERROR: No free module slot (max %d modules)\n", MAX_MODULES);
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A84;  // SW_MEMORY_FAILURE
     }
     
@@ -189,7 +400,15 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
     if (vm->module_count >= MAX_MODULES) {
         printf("[LOAD] ERROR: Module count limit reached (%d/%d)\n", 
                vm->module_count, MAX_MODULES);
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A84;
+    }
+    
+    // Log VM state before modification
+    if (!tx_log_vm_state(&vm->load_context.tx_ctx, vm)) {
+        printf("[LOAD] ERROR: Failed to log VM state\n");
+        tx_rollback(&vm->load_context.tx_ctx, vm);
+        return 0x6F00;
     }
     
     // End any existing load session on this channel
@@ -208,6 +427,9 @@ u16 handle_install_for_load(const u8 *apdu, u16 apdu_len,
     vm->load_context.app_count = 0;
     
     printf("[LOAD] Session initialized. Module ID: %u\n", module_id);
+    
+    // Commit transaction (Phase 1 complete)
+    tx_commit(&vm->load_context.tx_ctx);
     
     if (resp_len) {
         *resp_len = 0;
@@ -479,9 +701,13 @@ u16 handle_finalize_load(const u8 *apdu, u16 apdu_len,
     
     printf("[LOAD] === FINALIZE LOAD ===\n");
     
+    // Begin transaction for finalization
+    tx_begin(&vm->load_context.tx_ctx);
+    
     // Verify load session is active
     if (vm->load_context.state != LOAD_STATE_LOADING_BLOCKS) {
         printf("[LOAD] ERROR: No active load session\n");
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6985;
     }
     
@@ -489,6 +715,7 @@ u16 handle_finalize_load(const u8 *apdu, u16 apdu_len,
     if (vm->load_context.buffer_size == 0) {
         printf("[LOAD] ERROR: No data loaded\n");
         reset_load_context(vm);
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A80;
     }
     
@@ -502,6 +729,7 @@ u16 handle_finalize_load(const u8 *apdu, u16 apdu_len,
     if (!parse_sef_header(sef_data, sef_len, &vm->load_context)) {
         printf("[LOAD] ERROR: SEF header parsing failed\n");
         reset_load_context(vm);
+        tx_rollback(&vm->load_context.tx_ctx, vm);
         return 0x6A80;
     }
     
@@ -519,13 +747,31 @@ u16 handle_finalize_load(const u8 *apdu, u16 apdu_len,
                                   &vm->load_context)) {
             printf("[LOAD] ERROR: Import validation failed\n");
             reset_load_context(vm);
+            tx_rollback(&vm->load_context.tx_ctx, vm);
             return 0x6A88;  // SW_REFERENCED_DATA_NOT_FOUND
         }
     }
     
-    // Step 3: Register module in registry
-    printf("[LOAD] Step 3: Registering module in registry...\n");
+    // Step 3: Log VM state before modification
+    printf("[LOAD] Step 3: Logging VM state...\n");
+    if (!tx_log_vm_state(&vm->load_context.tx_ctx, vm)) {
+        printf("[LOAD] ERROR: Failed to log VM state\n");
+        reset_load_context(vm);
+        tx_rollback(&vm->load_context.tx_ctx, vm);
+        return 0x6F00;
+    }
+    
+    // Step 4: Register module in registry
+    printf("[LOAD] Step 4: Registering module in registry...\n");
     u8 module_id = vm->load_context.target_module_id;
+    
+    // Log registry state before modification
+    if (!tx_log_registry_update(&vm->load_context.tx_ctx, vm, module_id)) {
+        printf("[LOAD] ERROR: Failed to log registry update\n");
+        reset_load_context(vm);
+        tx_rollback(&vm->load_context.tx_ctx, vm);
+        return 0x6F00;
+    }
     
     // Get registry entry
     GCOSModuleRegistry *reg = &vm->module_registry[module_id];
@@ -566,6 +812,23 @@ u16 handle_finalize_load(const u8 *apdu, u16 apdu_len,
     printf("  Version: 0x%08X\n", reg->module_version);
     printf("  Imports: %u\n", reg->import_count);
     printf("  Code Size: %u bytes\n", reg->code_size);
+    
+    // Step 5: Save module metadata to Flash (if persistence enabled)
+    printf("[LOAD] Step 5: Saving module metadata to Flash...\n");
+    GCOSResult persist_ret = gcos_persistence_save_module_metadata(vm, module_id);
+    if (persist_ret != GCOS_SUCCESS) {
+        printf("[LOAD] WARNING: Failed to save module metadata (err=%d)\n", persist_ret);
+        printf("[LOAD] Continuing anyway - metadata can be regenerated\n");
+        // Non-fatal error - continue
+    } else {
+        // Log persistence operation
+        tx_log_persistence(&vm->load_context.tx_ctx, module_id);
+        printf("[LOAD] Module metadata saved successfully\n");
+    }
+    
+    // Commit transaction (all operations successful)
+    printf("[LOAD] Committing transaction...\n");
+    tx_commit(&vm->load_context.tx_ctx);
     
     // Reset load context
     reset_load_context(vm);

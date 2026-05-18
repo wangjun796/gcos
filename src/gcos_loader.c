@@ -696,11 +696,16 @@ GCOSResult gcos_loader_load_sef_to_flash(GCOSVM *vm, const u8 *sef_data, u32 sef
     
     GCOS_PRINTF("[Loader] Allocated Flash space at offset: 0x%08X\n", flash_offset);
     
+    /* Log Flash allocation for potential rollback */
+    /* Note: In production, would integrate with transaction system */
+    
     /* Step 3: Write SEF file to Flash */
     ret = eflash_ftl_write_logical(flash_offset, sef_data, sef_size);
     if (ret != 0) {
         GCOS_PRINTF("[Loader] ERROR: Failed to write SEF to Flash\n");
+        /* Rollback: Free allocated Flash space */
         gcos_flash_free_sef_space(flash_offset);
+        GCOS_PRINTF("[Loader] Rolled back Flash allocation\n");
         return GCOS_ERR_FILE_FORMAT; /* Use FILE_FORMAT error for IO errors */
     }
     
@@ -712,7 +717,9 @@ GCOSResult gcos_loader_load_sef_to_flash(GCOSVM *vm, const u8 *sef_data, u32 sef
     ret = gcos_loader_load_sef(vm, sef_data, sef_size);
     if (ret != GCOS_SUCCESS) {
         GCOS_PRINTF("[Loader] ERROR: Failed to parse SEF sections\n");
+        /* Rollback: Free allocated Flash space */
         gcos_flash_free_sef_space(flash_offset);
+        GCOS_PRINTF("[Loader] Rolled back Flash allocation due to parse error\n");
         return ret;
     }
     
@@ -721,7 +728,9 @@ GCOSResult gcos_loader_load_sef_to_flash(GCOSVM *vm, const u8 *sef_data, u32 sef
     u8 module_index = vm->module_count - 1; /* Last added module */
     if (module_index >= MAX_MODULES) {
         GCOS_PRINTF("[Loader] ERROR: Module index out of range\n");
+        /* Rollback: Free allocated Flash space */
         gcos_flash_free_sef_space(flash_offset);
+        GCOS_PRINTF("[Loader] Rolled back Flash allocation\n");
         return GCOS_ERR_INVALID_PARAM;
     }
     
@@ -744,6 +753,9 @@ GCOSResult gcos_loader_load_sef_to_flash(GCOSVM *vm, const u8 *sef_data, u32 sef
     if (ret != GCOS_SUCCESS) {
         GCOS_PRINTF("[Loader] WARNING: Failed to save module metadata\n");
         /* Non-fatal error - continue */
+        /* Note: Cannot rollback Flash writes easily without journaling */
+    } else {
+        GCOS_PRINTF("[Loader] Module metadata saved successfully\n");
     }
     
     GCOS_PRINTF("[Loader] === SEF loaded to Flash successfully ===\n\n");

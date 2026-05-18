@@ -577,6 +577,70 @@ typedef struct {
 } GCOSItemParseContext;
 
 /**
+ * @brief LOAD command transaction log entry types
+ * 
+ * Tracks all modifications during LOAD process for rollback support.
+ */
+typedef enum {
+    TX_LOG_NONE = 0x00,
+    TX_LOG_FLASH_ALLOC = 0x01,         /* Flash space allocated */
+    TX_LOG_MODULE_REGISTRY_UPDATE = 0x02,  /* Module registry modified */
+    TX_LOG_VM_STATE_CHANGE = 0x03,     /* VM state changed (module_count, etc.) */
+    TX_LOG_PERSISTENCE_SAVE = 0x04     /* Metadata saved to Flash */
+} GCOSTxLogType;
+
+/**
+ * @brief LOAD command transaction log entry
+ * 
+ * Records a single modification that may need to be rolled back.
+ */
+typedef struct {
+    GCOSTxLogType type;                /* Type of modification */
+    bool executed;                     /* Whether this operation was executed */
+    
+    union {
+        /* Flash allocation log */
+        struct {
+            u32 flash_offset;          /* Allocated Flash offset */
+            u32 flash_size;            /* Allocated size */
+        } flash_alloc;
+        
+        /* Module registry update log */
+        struct {
+            u8 module_id;              /* Modified module ID */
+            GCOSModuleRegistry old_state;  /* Previous registry state */
+            bool was_loaded;           /* Whether module was loaded before */
+        } registry_update;
+        
+        /* VM state change log */
+        struct {
+            u8 old_module_count;       /* Previous module count */
+            u8 old_app_count;          /* Previous app count */
+        } vm_state;
+        
+        /* Persistence save log */
+        struct {
+            u8 module_id;              /* Module ID whose metadata was saved */
+        } persistence;
+    } data;
+} GCOSTxLogEntry;
+
+/**
+ * @brief LOAD command transaction context
+ * 
+ * Maintains a log of all operations for atomic rollback support.
+ * Maximum 16 log entries should be sufficient for a single LOAD operation.
+ */
+#define MAX_TX_LOG_ENTRIES 16
+
+typedef struct {
+    GCOSTxLogEntry logs[MAX_TX_LOG_ENTRIES];
+    u8 log_count;                      /* Number of logged operations */
+    bool in_transaction;               /* Whether a transaction is active */
+    bool needs_rollback;               /* Whether rollback is required */
+} GCOSTransactionContext;
+
+/**
  * @brief LOAD context (maintains state across multiple APDUs)
  * 
  * Tracks LOAD command progress with enhanced section parsing state machine.
@@ -588,6 +652,9 @@ typedef struct {
     GCOSAID package_aid;              /* Package AID */
     u32 package_version;              /* Package version (u32 format per COS3 Appendix B) */
     u8 sd_id;                         /* Security domain ID */
+    
+    /* === Transaction Support === */
+    GCOSTransactionContext tx_ctx;    /* Transaction context for rollback */
     
     /* === SEF Data Buffer === */
     u8 buffer[GCOS_MODULE_CODE_SIZE]; /* Temporary buffer for SEF data */
